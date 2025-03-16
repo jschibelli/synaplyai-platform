@@ -41,35 +41,38 @@ export class CircuitBreaker {
         throw new Error('Circuit breaker is open');
       }
     }
+
+    let timeoutId: NodeJS.Timeout | undefined;
     
     try {
       // Execute with timeout
-      const result = await this.withTimeout(fn);
-      
+      const result = await Promise.race([
+        fn(),
+        new Promise<T>((_, reject) => {
+          if (this.options.timeout) {
+            timeoutId = setTimeout(() => {
+              reject(new Error('Request timeout'));
+            }, this.options.timeout);
+            // Ensure the timer doesn't keep the process running
+            timeoutId.unref();
+          }
+        })
+      ]);
+
       // If successful and in HALF_OPEN, reset the circuit
       if (this.state === 'HALF_OPEN') {
         this.reset();
       }
-      
+
       return result;
     } catch (error) {
       this.recordFailure();
       throw error;
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     }
-  }
-  
-  /**
-   * Add timeout to a promise
-   */
-  private async withTimeout<T>(fn: () => Promise<T>): Promise<T> {
-    if (!this.options.timeout) return fn();
-    
-    return Promise.race([
-      fn(),
-      new Promise<T>((_, reject) => {
-        setTimeout(() => reject(new Error('Request timeout')), this.options.timeout);
-      })
-    ]);
   }
   
   /**

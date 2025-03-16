@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.0] - 2025-03-16
+
+### Added
+- Redis integration for usage tracking
+- Proper Redis mocking for tests
+- Circuit breaker pattern implementation
+- Usage metrics repository with tenant isolation
+- Cost calculation service with model-specific pricing
+- Subscription management with tier-based limits
+- Real-time token counting with Redis
+- Fallback cache mechanism for Redis failures
+
+### Changed
+- Updated test configuration for Redis mocks
+- Improved error handling in UsageTracker
+- Enhanced tenant isolation in metrics collection
+- Modified subscription tiers to include token limits
+- Updated Jest configuration for better test isolation
+
+### Fixed
+- Redis connection handling in tests
+- Tenant context propagation in async operations
+- Usage tracking edge cases
+- Test suite cleanup and proper mocking
+
 ## [0.3.0] - 2025-03-25
 
 ### Added

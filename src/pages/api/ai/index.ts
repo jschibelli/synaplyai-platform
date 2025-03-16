@@ -3,10 +3,12 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]';
 import { OpenAIService } from '@/services/ai/openai';
 import { AnthropicService } from '@/services/ai/anthropic';
-import { UsageTracker } from '@/services/usage/tracker';
 import { withTenantContext } from '@/middleware/tenantContext';
+import { UsageTracker } from '../../../services/usage/UsageTracker';
+import { SubscriptionManager } from '../../../services/SubscriptionManager';
 
-const usageTracker = new UsageTracker();
+const subscriptionManager = new SubscriptionManager();
+const usageTracker = new UsageTracker(subscriptionManager);
 
 async function handler(
   req: NextApiRequest,
@@ -53,7 +55,7 @@ async function handler(
     if (!canProceed) {
       return res.status(403).json({ 
         error: 'Usage limit exceeded',
-        subscription: 'Please upgrade your subscription for more tokens'
+        message: 'Daily or monthly token limit reached'
       });
     }
     

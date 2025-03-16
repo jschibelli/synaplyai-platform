@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'async_hooks';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface TenantContext {
   tenantId: string;
@@ -7,22 +8,25 @@ export interface TenantContext {
   traceId: string;
 }
 
-// Create AsyncLocalStorage instance for tenant context
-export const tenantContextStorage = new AsyncLocalStorage<TenantContext>();
+const tenantContextStorage = new AsyncLocalStorage<TenantContext>();
 
-// Helper functions to access the current context
+export function getCurrentTenantContext(): TenantContext | undefined {
+  return tenantContextStorage.getStore();
+}
+
 export function getCurrentTenantId(): string | undefined {
   return tenantContextStorage.getStore()?.tenantId;
 }
 
-export function getCurrentUserId(): string | undefined {
-  return tenantContextStorage.getStore()?.userId;
+export function setCurrentTenantContext(tenantId: string, userId: string = 'system'): void {
+  const context: TenantContext = {
+    tenantId,
+    userId,
+    requestId: uuidv4(),
+    traceId: uuidv4()
+  };
+  
+  tenantContextStorage.enterWith(context);
 }
 
-export function getCurrentRequestId(): string | undefined {
-  return tenantContextStorage.getStore()?.requestId;
-}
-
-export function getCurrentContext(): TenantContext | undefined {
-  return tenantContextStorage.getStore();
-}
+export { tenantContextStorage };

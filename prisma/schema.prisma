@@ -17,6 +17,7 @@ model User {
   emailVerified  DateTime?
   image          String?
   role           String      @default("user")
+  tenantId       String     // Make sure this field exists
   subscriptionId String?
   usageLimit     Int         @default(50000)
   accounts       Account[]
@@ -24,6 +25,8 @@ model User {
   usage          UserUsage[]
   subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
   documents      Document[]
+
+  @@index([tenantId])
 }
 
 model Account {

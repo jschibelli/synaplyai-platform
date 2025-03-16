@@ -1,4 +1,4 @@
-import { tenantContextStorage, TenantContext } from '../../src/lib/tenantContext';
+import { tenantContextStorage, TenantContext, setCurrentTenantContext, getCurrentTenantContext, getCurrentTenantId } from '../../src/lib/tenantContext';
 import { PrismaClient } from '@prisma/client';
 import { addTenantMiddleware } from '../../src/prisma/middleware';
 
@@ -11,30 +11,53 @@ describe('Tenant Isolation', () => {
     prisma = new PrismaClient();
     prisma = addTenantMiddleware(prisma);
 
-    // Create test users
+    // Clean up existing data
+    await prisma.document.deleteMany({});
+    await prisma.user.deleteMany({});
+
+    // Generate unique emails using timestamps
+    const timestamp = Date.now();
+    const user1Email = `user1-${timestamp}@test.com`;
+    const user2Email = `user2-${timestamp}@test.com`;
+
+    // Set the tenant context before creating users
+    setCurrentTenantContext('test-tenant-1', 'test-user-1');
+
+    // Create test users with unique emails
     const user1 = await prisma.user.create({
       data: {
-        email: 'user1@test.com',
-        role: 'user'
+        email: user1Email,
+        role: 'user',
+        name: 'Test User 1',
+        usageLimit: 50000,
+        tenantId: 'test-tenant-1'
       }
     });
     user1Id = user1.id;
 
+    // Set different tenant context for second user
+    setCurrentTenantContext('test-tenant-2', 'test-user-2');
+
     const user2 = await prisma.user.create({
       data: {
-        email: 'user2@test.com',
-        role: 'user'
+        email: user2Email,
+        role: 'user',
+        name: 'Test User 2',
+        usageLimit: 50000,
+        tenantId: 'test-tenant-2'
       }
     });
     user2Id = user2.id;
+
+    // Reset to first tenant context for remaining tests
+    setCurrentTenantContext('test-tenant-1', 'test-user-1');
   });
 
   afterEach(async () => {
-    // Clean up test data
-    await prisma.document.deleteMany();
-    await prisma.user.deleteMany();
+    // Clean up after each test
+    await prisma.document.deleteMany({});
+    await prisma.user.deleteMany({});
     await prisma.$disconnect();
-    jest.clearAllMocks();
   });
 
   it('should isolate data between tenants', async () => {
@@ -142,5 +165,28 @@ describe('Tenant Isolation', () => {
       const currentContext = tenantContextStorage.getStore();
       expect(currentContext).toEqual(context);
     });
+  });
+
+  test('should maintain tenant context', () => {
+    const context = getCurrentTenantContext();
+    expect(context).toBeDefined();
+    expect(context?.tenantId).toBe('test-tenant-1');
+    expect(context?.userId).toBe('test-user-1');
+    expect(context?.requestId).toBeDefined();
+    expect(context?.traceId).toBeDefined();
+  });
+
+  test('should get tenant id', () => {
+    const tenantId = getCurrentTenantId();
+    expect(tenantId).toBe('test-tenant-1');
+  });
+
+  test('should maintain full tenant context', () => {
+    const context = getCurrentTenantContext();
+    expect(context).toBeDefined();
+    expect(context?.tenantId).toBe('test-tenant-1');
+    expect(context?.userId).toBe('test-user-1');
+    expect(context?.requestId).toBeDefined();
+    expect(context?.traceId).toBeDefined();
   });
 });
