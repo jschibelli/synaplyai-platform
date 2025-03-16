@@ -1,118 +1,354 @@
-import { config } from 'dotenv';
-import { Redis } from 'ioredis';
-import { RedisClient } from '../metrics/redis-client';
+import { ShardedRedisClient } from '../metrics/sharded-redis';
+import { prisma } from '../lib/prisma';
+import { ComplianceLogger } from '../compliance/logger';
 
-config();
-
-interface FeatureFlags {
-    ENABLE_ADVANCED_FILTERING: boolean;
-    ENABLE_EMBEDDING_CHECKS: boolean;
-    ENABLE_LLM_CHECKS: boolean;
+export interface FeatureFlag {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  tenantId: string;
+  conditions?: Record<string, any>;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export class FeatureFlagService {
-    private flags: FeatureFlags;
-    private static readonly CACHE_TTL = 300; // 5 minutes
-    private cache: Map<string, { value: boolean; expires: number }> = new Map();
-
-    constructor(private redis: Redis) {
-        this.flags = {
-            ENABLE_ADVANCED_FILTERING: this.getFlag('ENABLE_ADVANCED_FILTERING'),
-            ENABLE_EMBEDDING_CHECKS: this.getFlag('ENABLE_EMBEDDING_CHECKS'),
-            ENABLE_LLM_CHECKS: this.getFlag('ENABLE_LLM_CHECKS'),
-        };
-    }
-
-    private getFlag(flagName: string): boolean {
-        return process.env[flagName] === 'true';
-    }
-
-    public isFeatureEnabled(flagName: keyof FeatureFlags): boolean {
-        return this.flags[flagName];
-    }
-
-    async isFeatureEnabled(tenantId: string, feature: string): Promise<boolean> {
-        const cacheKey = `${tenantId}:${feature}`;
-        const cached = this.cache.get(cacheKey);
-
-        if (cached && cached.expires > Date.now()) {
-            return cached.value;
+  private redisClient: ShardedRedisClient;
+  private cacheTTLSeconds: number;
+  
+  constructor(redisClient: ShardedRedisClient, cacheTTLSeconds = 300) {
+    this.redisClient = redisClient;
+    this.cacheTTLSeconds = cacheTTLSeconds;
+  }
+  
+  /**
+   * Check if a feature flag is enabled for a specific tenant
+   */
+  async isEnabled(tenantId: string, flagName: string, context?: Record<string, any>): Promise<boolean> {
+    // Try to get from cache first for performance
+    const cacheKey = `feature-flag:${tenantId}:${flagName}`;
+    const shard = this.redisClient.getShardForTenant(tenantId);
+    const cachedFlag = await shard.get(cacheKey);
+    
+    let flag;
+    if (cachedFlag) {
+      // Use cached value if available
+      flag = JSON.parse(cachedFlag);
+    } else {
+      // Fetch from database if not in cache
+      flag = await prisma.featureFlag.findFirst({
+        where: {
+          tenantId,
+          name: flagName
         }
-
-        try {
-            const value = await this.redis.hget(`tenant:${tenantId}:flags`, feature);
-            const enabled = value === 'true';
-
-            this.cache.set(cacheKey, {
-                value: enabled,
-                expires: Date.now() + FeatureFlagService.CACHE_TTL * 1000
-            });
-
-            return enabled;
-        } catch (error) {
-            // Fall back to defaults if Redis is unavailable
-            return this.getDefaultValue(feature);
-        }
-    }
-
-    private getDefaultValue(feature: string): boolean {
-        const defaults: Record<string, boolean> = {
-            'ENABLE_ADVANCED_FILTERING': false,
-            'ENABLE_EMBEDDING_CHECKS': false,
-            'ENABLE_LLM_CHECKS': false
-        };
-        return defaults[feature] ?? false;
-    }
-
-    async isEnabled(flagName: string, tenantId: string): Promise<boolean> {
-        // Check tenant-specific override
-        const tenantFlag = await this.redis.get(`feature:${flagName}:tenant:${tenantId}`);
-        if (tenantFlag !== null) {
-            return tenantFlag === 'true';
-        }
-        
-        // Fallback to global flag
-        const globalFlag = await this.redis.get(`feature:${flagName}:global`);
-        return globalFlag === 'true';
+      });
+      
+      // Cache the result
+      if (flag) {
+        await shard.set(cacheKey, JSON.stringify(flag), { EX: this.cacheTTLSeconds });
+      }
     }
     
-    async setFlag(flagName: string, enabled: boolean, tenantId?: string): Promise<void> {
-        const key = tenantId 
-            ? `feature:${flagName}:tenant:${tenantId}` 
-            : `feature:${flagName}:global`;
-            
-        await this.redis.set(key, enabled.toString());
+    // If flag doesn't exist, it's disabled by default
+    if (!flag) {
+      return false;
     }
     
-    async deleteFlag(flagName: string, tenantId?: string): Promise<void> {
-        const key = tenantId 
-            ? `feature:${flagName}:tenant:${tenantId}` 
-            : `feature:${flagName}:global`;
-            
-        await this.redis.del(key);
+    // Check basic enabled status
+    if (!flag.enabled) {
+      return false;
     }
     
-    async getAllFlags(tenantId?: string): Promise<Record<string, boolean>> {
-        const result: Record<string, boolean> = {};
-        
-        // Get global flags
-        const globalKeys = await this.redis.keys('feature:*:global');
-        for (const key of globalKeys) {
-            const flagName = key.split(':')[1];
-            const value = await this.redis.get(key);
-            result[flagName] = value === 'true';
-        }
-        
-        // Override with tenant-specific flags if provided
-        if (tenantId) {
-            const tenantKeys = await this.redis.keys(`feature:*:tenant:${tenantId}`);
-            for (const key of tenantKeys) {
-                const flagName = key.split(':')[1];
-                const value = await this.redis.get(key);
-                result[flagName] = value === 'true';
-            }
-        }
-        
-        return result;
+    // If there are conditions, evaluate them
+    if (flag.conditions && Object.keys(flag.conditions).length > 0) {
+      return this.evaluateConditions(flag.conditions, context || {});
     }
+    
+    // No conditions, just return the enabled status
+    return flag.enabled;
+  }
+  
+  /**
+   * Create a new feature flag
+   */
+  async createFlag(
+    tenantId: string,
+    name: string,
+    description: string,
+    enabled: boolean,
+    conditions?: Record<string, any>
+  ): Promise<FeatureFlag> {
+    // Check if flag already exists
+    const existingFlag = await prisma.featureFlag.findFirst({
+      where: {
+        tenantId,
+        name
+      }
+    });
+    
+    if (existingFlag) {
+      throw new Error(`Feature flag '${name}' already exists for tenant '${tenantId}'`);
+    }
+    
+    // Create the flag
+    const flag = await prisma.featureFlag.create({
+      data: {
+        tenantId,
+        name,
+        description,
+        enabled,
+        conditions: conditions ? JSON.stringify(conditions) : null
+      }
+    });
+    
+    // Cache the new flag
+    const cacheKey = `feature-flag:${tenantId}:${name}`;
+    const shard = this.redisClient.getShardForTenant(tenantId);
+    await shard.set(cacheKey, JSON.stringify(flag), { EX: this.cacheTTLSeconds });
+    
+    // Log the creation
+    await ComplianceLogger.log({
+      eventType: 'feature.flag.created',
+      resourceId: name,
+      description: `Feature flag '${name}' created`,
+      metadata: {
+        tenantId,
+        enabled,
+        conditions
+      }
+    });
+    
+    return flag;
+  }
+  
+  /**
+   * Update an existing feature flag
+   */
+  async updateFlag(
+    tenantId: string,
+    name: string,
+    updates: {
+      description?: string;
+      enabled?: boolean;
+      conditions?: Record<string, any>;
+    }
+  ): Promise<FeatureFlag> {
+    // Get the flag
+    const flag = await prisma.featureFlag.findFirst({
+      where: {
+        tenantId,
+        name
+      }
+    });
+    
+    if (!flag) {
+      throw new Error(`Feature flag '${name}' not found for tenant '${tenantId}'`);
+    }
+    
+    // Update the flag
+    const updatedFlag = await prisma.featureFlag.update({
+      where: {
+        id: flag.id
+      },
+      data: {
+        description: updates.description !== undefined ? updates.description : flag.description,
+        enabled: updates.enabled !== undefined ? updates.enabled : flag.enabled,
+        conditions: updates.conditions !== undefined ? JSON.stringify(updates.conditions) : flag.conditions,
+        updatedAt: new Date()
+      }
+    });
+    
+    // Update the cache
+    const cacheKey = `feature-flag:${tenantId}:${name}`;
+    const shard = this.redisClient.getShardForTenant(tenantId);
+    await shard.set(cacheKey, JSON.stringify(updatedFlag), { EX: this.cacheTTLSeconds });
+    
+    // Log the update
+    await ComplianceLogger.log({
+      eventType: 'feature.flag.updated',
+      resourceId: name,
+      description: `Feature flag '${name}' updated`,
+      metadata: {
+        tenantId,
+        updates,
+        previousState: {
+          enabled: flag.enabled,
+          conditions: flag.conditions ? JSON.parse(flag.conditions as string) : null
+        }
+      }
+    });
+    
+    return updatedFlag;
+  }
+  
+  /**
+   * Delete a feature flag
+   */
+  async deleteFlag(tenantId: string, name: string): Promise<void> {
+    // Get the flag
+    const flag = await prisma.featureFlag.findFirst({
+      where: {
+        tenantId,
+        name
+      }
+    });
+    
+    if (!flag) {
+      throw new Error(`Feature flag '${name}' not found for tenant '${tenantId}'`);
+    }
+    
+    // Delete the flag
+    await prisma.featureFlag.delete({
+      where: {
+        id: flag.id
+      }
+    });
+    
+    // Remove from cache
+    const cacheKey = `feature-flag:${tenantId}:${name}`;
+    const shard = this.redisClient.getShardForTenant(tenantId);
+    await shard.del(cacheKey);
+    
+    // Log the deletion
+    await ComplianceLogger.log({
+      eventType: 'feature.flag.deleted',
+      resourceId: name,
+      description: `Feature flag '${name}' deleted`,
+      metadata: {
+        tenantId,
+        previousState: {
+          enabled: flag.enabled,
+          conditions: flag.conditions ? JSON.parse(flag.conditions as string) : null
+        }
+      }
+    });
+  }
+  
+  /**
+   * Get all feature flags for a tenant
+   */
+  async getAllFlags(tenantId: string): Promise<FeatureFlag[]> {
+    const flags = await prisma.featureFlag.findMany({
+      where: {
+        tenantId
+      }
+    });
+    
+    return flags.map(flag => ({
+      ...flag,
+      conditions: flag.conditions ? JSON.parse(flag.conditions as string) : undefined
+    }));
+  }
+  
+  /**
+   * Clear the cache for a specific flag
+   */
+  async clearCache(tenantId: string, flagName: string): Promise<void> {
+    const cacheKey = `feature-flag:${tenantId}:${flagName}`;
+    const shard = this.redisClient.getShardForTenant(tenantId);
+    await shard.del(cacheKey);
+  }
+  
+  /**
+   * Clear all cached flags for a tenant
+   */
+  async clearAllCache(tenantId: string): Promise<void> {
+    const flags = await this.getAllFlags(tenantId);
+    const shard = this.redisClient.getShardForTenant(tenantId);
+    
+    for (const flag of flags) {
+      const cacheKey = `feature-flag:${tenantId}:${flag.name}`;
+      await shard.del(cacheKey);
+    }
+  }
+  
+  /**
+   * Evaluate conditions against the provided context
+   */
+  private evaluateConditions(conditions: Record<string, any>, context: Record<string, any>): boolean {
+    // Implementation of a basic condition evaluator
+    // In a real system, this would be more sophisticated
+    
+    // AND condition - all must be true
+    if (conditions.$and && Array.isArray(conditions.$and)) {
+      return conditions.$and.every(subCondition => 
+        this.evaluateConditions(subCondition, context)
+      );
+    }
+    
+    // OR condition - at least one must be true
+    if (conditions.$or && Array.isArray(conditions.$or)) {
+      return conditions.$or.some(subCondition => 
+        this.evaluateConditions(subCondition, context)
+      );
+    }
+    
+    // NOT condition - invert result
+    if (conditions.$not) {
+      return !this.evaluateConditions(conditions.$not, context);
+    }
+    
+    // User percentage rollout
+    if (conditions.$percentage && typeof conditions.$percentage.value === 'number') {
+      const userId = context.userId || '';
+      if (!userId) return false;
+      
+      const percentage = conditions.$percentage.value;
+      const hash = this.hashString(userId) % 100;
+      return hash < percentage;
+    }
+    
+    // Simple property match
+    for (const [key, value] of Object.entries(conditions)) {
+      if (key.startsWith('$')) continue; // Skip special operators
+      
+      // Handle existence check
+      if (value === '$exists') {
+        if (context[key] === undefined) return false;
+        continue;
+      }
+      
+      // Handle array contains
+      if (Array.isArray(value) && value[0] === '$contains' && Array.isArray(context[key])) {
+        if (!context[key].includes(value[1])) return false;
+        continue;
+      }
+      
+      // Handle regexp
+      if (typeof value === 'string' && value.startsWith('$regex:')) {
+        const regexStr = value.substring(7);
+        const regex = new RegExp(regexStr);
+        if (!regex.test(context[key])) return false;
+        continue;
+      }
+      
+      // Handle comparison operators
+      if (typeof value === 'object' && value !== null) {
+        if (value.$gt !== undefined && !(context[key] > value.$gt)) return false;
+        if (value.$gte !== undefined && !(context[key] >= value.$gte)) return false;
+        if (value.$lt !== undefined && !(context[key] < value.$lt)) return false;
+        if (value.$lte !== undefined && !(context[key] <= value.$lte)) return false;
+        if (value.$ne !== undefined && context[key] === value.$ne) return false;
+        continue;
+      }
+      
+      // Simple equality check
+      if (context[key] !== value) return false;
+    }
+    
+    return true;
+  }
+  
+  /**
+   * Simple string hash function for percentage-based rollouts
+   */
+  private hashString(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) - hash) + str.charCodeAt(i);
+      hash |= 0; // Convert to 32bit integer
+    }
+    return Math.abs(hash);
+  }
 }

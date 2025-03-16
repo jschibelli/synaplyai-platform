@@ -1,6 +1,6 @@
 // src/metrics/usage-collector.ts
 import { Redis } from 'ioredis';
-import { getCurrentTenantId } from '../lib/tenantContext';
+import { getCurrentTenantId } from '../lib/tenant-context';
 
 interface MetricsBucket {
   count: number;

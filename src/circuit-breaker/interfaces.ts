@@ -20,10 +20,15 @@ export interface CircuitBreakerStore {
   resetCounters(key: string): Promise<void>;
   getLastStateChange(key: string): Promise<Date | null>;
   setLastStateChange(key: string, timestamp: Date): Promise<void>;
+  
+  // New methods for bulkhead pattern
+  incrementCounter(key: string): Promise<number>;
+  decrementCounter(key: string): Promise<number>;
 }
 
 export interface CircuitBreaker {
   execute<T>(command: () => Promise<T>): Promise<T>;
   getState(): Promise<CircuitState>;
   reset(): Promise<void>;
+  on(event: string, listener: (...args: any[]) => void): this;
 }

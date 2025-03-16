@@ -1,4 +1,4 @@
-import { ContentFilter, FilterResponse, ContentFilterResult } from './interfaces';
+import { ContentFilter, FilterResponse, ContentFilterResult, FilterResult } from './interfaces';
 import { ComplianceLogger } from '../compliance/logger';
 
 interface RegexRule {
@@ -69,5 +69,31 @@ export class RegexContentFilter implements ContentFilter {
     }
     
     return response;
+  }
+}
+
+export class RegexFilterStage {
+  private disallowedPatterns: RegExp[] = [
+    /hate speech/i,
+    /obscenity/i,
+    /threat/i
+  ];
+
+  async process(content: string): Promise<FilterResult> {
+    for (const pattern of this.disallowedPatterns) {
+      if (pattern.test(content)) {
+        return {
+          isAllowed: false,
+          confidenceScore: 1.0,
+          reasons: [`Content matches disallowed pattern: ${pattern.source}`]
+        };
+      }
+    }
+
+    return {
+      isAllowed: true,
+      confidenceScore: 1.0,
+      reasons: []
+    };
   }
 }

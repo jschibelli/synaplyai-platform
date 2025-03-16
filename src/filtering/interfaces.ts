@@ -5,10 +5,9 @@ export enum FilterDecision {
 }
 
 export interface FilterResult {
-  decision: FilterDecision;
-  confidence: number;
-  source: string;
-  details?: any;
+  isAllowed: boolean;
+  confidenceScore?: number;
+  reasons: string[];
 }
 
 export interface ContentFilter {
@@ -17,14 +16,23 @@ export interface ContentFilter {
 
 export enum ContentFilterResult {
   ALLOWED = 'ALLOWED',
-  FLAGGED = 'FLAGGED',
-  BLOCKED = 'BLOCKED'
+  BLOCKED = 'BLOCKED',
+  WARNING = 'WARNING'
 }
 
 export interface FilterResponse {
   result: ContentFilterResult;
   confidence: number;
-  reason?: string;
+  reasons?: string[];
+}
+
+export interface FilterStage {
+  name: string;
+  executionStrategy: 'sync' | 'parallel';
+  filter: (content: string, context?: any) => Promise<{
+    result: ContentFilterResult;
+    confidence: number;
+  }>;
 }
 
 export interface ContentFilter {

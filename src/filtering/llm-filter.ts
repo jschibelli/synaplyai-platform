@@ -2,6 +2,7 @@ import { ContentFilter, FilterResponse, ContentFilterResult } from './interfaces
 import { ComplianceLogger } from '../compliance/logger';
 import { getFeatureFlag } from '../features/flag-service';
 import { getLLMCompletion } from '../services/ai';
+import { FilterResult } from './interfaces';
 
 export class LLMContentFilter implements ContentFilter {
   name = 'LLMContentFilter';
@@ -121,5 +122,29 @@ export class LLMContentFilter implements ContentFilter {
         reason: 'Failed to parse LLM response'
       };
     }
+  }
+}
+
+export class LLMFilterStage {
+  // Simplified implementation for testing
+  async process(content: string): Promise<FilterResult> {
+    // Simulate LLM-based filtering with a simple heuristic
+    const riskTerms = ['illegal', 'hacking', 'attack'];
+    
+    for (const term of riskTerms) {
+      if (content.toLowerCase().includes(term)) {
+        return {
+          isAllowed: false,
+          confidenceScore: 0.95,
+          reasons: ['Content violates policy: contains risky terms']
+        };
+      }
+    }
+
+    return {
+      isAllowed: true,
+      confidenceScore: 0.92,
+      reasons: []
+    };
   }
 }

@@ -73,4 +73,22 @@ export class RedisCircuitBreakerStore implements CircuitBreakerStore {
       { EX: this.expirySeconds }
     );
   }
+
+  // New methods for bulkhead pattern
+  async incrementCounter(key: string): Promise<number> {
+    const result = await this.client.incr(key);
+    // Use a shorter expiry for concurrency counters to prevent stuck counters
+    await this.client.expire(key, 60); // 60 seconds expiry
+    return result;
+  }
+  
+  async decrementCounter(key: string): Promise<number> {
+    const result = await this.client.decr(key);
+    // Ensure counter doesn't go below zero
+    if (result < 0) {
+      await this.client.set(key, '0');
+      return 0;
+    }
+    return result;
+  }
 }
