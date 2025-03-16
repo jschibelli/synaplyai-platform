@@ -4,10 +4,11 @@ import { authOptions } from '../auth/[...nextauth]';
 import { OpenAIService } from '@/services/ai/openai';
 import { AnthropicService } from '@/services/ai/anthropic';
 import { UsageTracker } from '@/services/usage/tracker';
+import { withTenantContext } from '@/middleware/tenantContext';
 
 const usageTracker = new UsageTracker();
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -56,15 +57,25 @@ export default async function handler(
       });
     }
     
-    // Generate content
-    const generatedContent = await service.generateContent(content, options);
-    
-    // Track actual usage after generation (more accurate)
-    // In a real implementation, use the token count from the API response
-    const actualTokens = generatedContent.length / 4;
-    await usageTracker.trackTokenUsage(userId, model, actualTokens - estimatedTokens);
-    
-    return res.status(200).json({ content: generatedContent });
+    try {
+      // Generate content
+      const generatedContent = await service.generateContent(content, options);
+      
+      // Track actual usage after generation (more accurate)
+      // In a real implementation, use the token count from the API response
+      const actualTokens = generatedContent.length / 4;
+      await usageTracker.trackTokenUsage(userId, model, actualTokens - estimatedTokens);
+      
+      return res.status(200).json({ content: generatedContent });
+    } catch (error: any) {
+      if (error.message.includes('Content not allowed')) {
+        return res.status(400).json({
+          error: 'Content filtered',
+          message: error.message
+        });
+      }
+      throw error;
+    }
   } catch (error: any) {
     console.error('AI request error:', error);
     return res.status(500).json({ 
@@ -73,3 +84,5 @@ export default async function handler(
     });
   }
 }
+
+export default withTenantContext(handler);

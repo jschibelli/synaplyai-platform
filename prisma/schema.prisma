@@ -8,7 +8,6 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 model User {
@@ -77,11 +76,14 @@ model UserUsage {
 model Document {
   id          String    @id @default(cuid())
   title       String
+  content     String    @db.Text
+  userId      String
+  tenantId    String
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  versions    Version[]
+  user        User      @relation(fields: [userId], references: [id])
+  versions    Version[] 
+  @@index([tenantId])
 }
 
 model Version {

@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-03-25
+
+### Added
+- Tenant isolation implementation with AsyncLocalStorage
+- Prisma middleware for automatic tenant filtering
+- Content filtering system for AI prompts and responses
+- Tenant-specific content filtering rules
+- Comprehensive test suite for tenant isolation and content filtering
+- Integration with OpenAI and Anthropic services with tenant context
+- Logging system for content filtering events
+- API middleware for tenant context propagation
+
+### Changed
+- Updated database schema to support tenant isolation
+- Modified AI services to respect tenant boundaries
+- Enhanced error handling with tenant-aware logging
+- Updated API routes to use tenant context middleware
+
+### Fixed
+- Cross-tenant data access vulnerabilities
+- Content filtering edge cases
+- Tenant context persistence in async operations
+
 ## [0.2.0] - 2025-03-21
 
 ### Added

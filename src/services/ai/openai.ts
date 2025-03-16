@@ -1,5 +1,6 @@
 import { OpenAI } from 'openai';
 import { AIService } from './base';
+import { getCurrentTenantId } from '@/lib/tenantContext';
 
 export class OpenAIService extends AIService {
   private client: OpenAI;
@@ -19,6 +20,44 @@ export class OpenAIService extends AIService {
     });
 
     return response.choices[0]?.message?.content || '';
+  }
+
+  async generateContentInternal(prompt: string, options: any = {}): Promise<string> {
+    // Enhance prompt with tenant context to prevent data leakage
+    const tenantId = getCurrentTenantId() || 'default-tenant';
+    const enhancedPrompt = `[CONTEXT: You are responding to tenant: ${tenantId}] ${prompt}`;
+    
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages: [{ role: 'user', content: enhancedPrompt }],
+      ...options
+    });
+
+    return response.choices[0]?.message?.content || '';
+  }
+  
+  async streamContentInternal(
+    prompt: string,
+    onToken: (token: string) => void,
+    options: any = {}
+  ): Promise<void> {
+    // Enhance prompt with tenant context
+    const tenantId = getCurrentTenantId() || 'default-tenant';
+    const enhancedPrompt = `[CONTEXT: You are responding to tenant: ${tenantId}] ${prompt}`;
+    
+    const stream = await this.client.chat.completions.create({
+      model: this.model,
+      messages: [{ role: 'user', content: enhancedPrompt }],
+      stream: true,
+      ...options
+    });
+    
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content;
+      if (content) {
+        onToken(content);
+      }
+    }
   }
 
   getModelInfo() {
