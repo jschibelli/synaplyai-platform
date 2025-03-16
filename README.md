@@ -220,7 +220,7 @@ Detailed documentation is available in the `docs` directory:
 - [Filtering System](docs/FILTERING-SYSTEM.md) - Content filtering pipeline
 - [Redis Setup](docs/REDIS-SETUP.md) - Redis configuration for metrics & caching
 - [Usage Tracking](docs/USAGE-TRACKING.md) - Consumption monitoring & reporting
-- [Tenant Isolation](docs/POC-TENANT-ISOLATION.md) - Multi-tenant architecture
+- [Tenant Isolation](docs/TENANT-ISOLATION.md) - Multi-tenant architecture
 - [Changelog](docs/CHANGELOG.md) - Project history and updates
 
 ## Deployment
