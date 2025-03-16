@@ -10,6 +10,9 @@
     "@tiptap/extension-placeholder": "^2.11.5",
     "@tiptap/react": "^2.11.5",
     "@tiptap/starter-kit": "^2.11.5",
+    "@tiptap/extension-collaboration": "^2.11.5",
+    "@tiptap/extension-collaboration-cursor": "^2.11.5",
+    "@hocuspocus/provider": "^2.5.0",
     "async_hooks": "^1.0.0",
     "ioredis": "^5.6.0",
     "next": "^15.2.2",
@@ -22,7 +25,8 @@
     "redis-mock": "^0.56.3",
     "socket.io": "^4.8.1",
     "uuid": "^9.0.0",
-    "ws": "^8.18.1"
+    "ws": "^8.18.1",
+    "yjs": "^13.6.8"
   },
   "scripts": {
     "build": "tsc",
@@ -33,6 +37,7 @@
     "test:usage": "jest --testPathPattern=tests/usage",
     "test:coverage": "jest --coverage",
     "test:compliance": "npx jest \"src/tests/(circuit-breaker|metrics|filtering).test.ts\" --env=node",
+    "test:collaboration": "jest --testPathPattern=tests/collaboration",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "test:all": "jest",
