@@ -6,25 +6,26 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
-  id             String      @id @default(cuid())
+  id             String          @id @default(cuid())
   name           String?
-  email          String?     @unique
+  email          String?         @unique
   emailVerified  DateTime?
   image          String?
-  role           String      @default("user")
-  tenantId       String     // Make sure this field exists
+  role           String          @default("user")
+  tenantId       String
   subscriptionId String?
-  usageLimit     Int         @default(50000)
+  usageLimit     Int             @default(50000)
   accounts       Account[]
   sessions       Session[]
   usage          UserUsage[]
-  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+  subscription   Subscription?   @relation(fields: [subscriptionId], references: [id])
   documents      Document[]
+  complianceLogs ComplianceLog[] // Add this line to create the opposite relation
 
   @@index([tenantId])
 }
@@ -57,10 +58,10 @@ model Session {
 }
 
 model Subscription {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   description String?
-  price       Decimal  @db.Decimal(10, 2)
+  price       Decimal @db.Decimal(10, 2)
   tokenLimit  Int
   users       User[]
 }
@@ -77,22 +78,41 @@ model UserUsage {
 }
 
 model Document {
-  id          String    @id @default(cuid())
-  title       String
-  content     String    @db.Text
-  userId      String
-  tenantId    String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  user        User      @relation(fields: [userId], references: [id])
-  versions    Version[] 
+  id        String    @id @default(cuid())
+  title     String
+  content   String    @db.Text
+  userId    String
+  tenantId  String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id])
+  versions  Version[]
+
   @@index([tenantId])
 }
 
 model Version {
-  id          String   @id @default(cuid())
-  content     String   @db.Text
-  createdAt   DateTime @default(now())
-  documentId  String
-  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  content    String   @db.Text
+  createdAt  DateTime @default(now())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
+
+model ComplianceLog {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Using gen_random_uuid() instead
+  tenantId     String   @map("tenant_id")
+  eventType    String   @map("event_type")
+  content      String
+  metadata     Json?
+  filterResult Json?    @map("filter_result")
+  createdAt    DateTime @default(now()) @map("created_at")
+  sourceIp     String?  @map("source_ip")
+  userId       String?  @map("user_id")
+  user         User?    @relation(fields: [userId], references: [id]) // Add this relation field
+
+  @@index([tenantId])
+  @@index([createdAt])
+  @@index([eventType])
+  @@map("compliance_log")
 }

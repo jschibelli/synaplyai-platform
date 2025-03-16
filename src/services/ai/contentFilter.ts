@@ -82,3 +82,95 @@ export class ContentFilter {
     };
   }
 }
+
+export class EnhancedContentFilter extends ContentFilter {
+  private embeddingCheck: boolean;
+  private llmCheck: boolean;
+
+  constructor(options: {
+    embeddingCheck?: boolean;
+    llmCheck?: boolean;
+  } = {}) {
+    super();
+    this.embeddingCheck = options.embeddingCheck ?? false;
+    this.llmCheck = options.llmCheck ?? false;
+  }
+
+  async filterContent(content: string): Promise<{
+    isAllowed: boolean;
+    reasons: string[];
+    riskScore?: number;
+  }> {
+    // Basic regex check first (fast)
+    const regexResult = await super.filterContent(content);
+    if (!regexResult.isAllowed) {
+      return regexResult;
+    }
+
+    // Embedding check if enabled
+    if (this.embeddingCheck) {
+      const embeddingResult = await this.checkEmbeddings(content);
+      if (!embeddingResult.isAllowed) {
+        return embeddingResult;
+      }
+    }
+
+    // LLM check if enabled (most expensive)
+    if (this.llmCheck) {
+      return this.checkWithLLM(content);
+    }
+
+    return regexResult;
+  }
+}
+
+// Add to src/services/ai/contentFilter.ts
+interface FilterStage {
+  priority: number;
+  execute: (content: string) => Promise<FilterResult>;
+  timeoutMs?: number;
+}
+
+export class EnhancedFilterPipeline {
+  private stages: FilterStage[] = [];
+  private metrics: MetricsCollector;
+
+  constructor(metrics: MetricsCollector) {
+    this.metrics = metrics;
+  }
+
+  addStage(stage: FilterStage): void {
+    this.stages.push(stage);
+    this.stages.sort((a, b) => a.priority - b.priority);
+  }
+
+  async executePipeline(content: string): Promise<FilterResult> {
+    const startTime = performance.now();
+    let result: FilterResult = { isAllowed: true, reasons: [] };
+
+    for (const stage of this.stages) {
+      try {
+        const stageResult = await Promise.race([
+          stage.execute(content),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Stage timeout')), 
+            stage.timeoutMs || 5000)
+          )
+        ]);
+
+        if (!stageResult.isAllowed) {
+          result = stageResult;
+          break;
+        }
+      } catch (error) {
+        await this.metrics.trackLatency('filter_stage_error', 
+          performance.now() - startTime);
+        throw error;
+      }
+    }
+
+    await this.metrics.trackLatency('filter_pipeline_complete', 
+      performance.now() - startTime);
+    return result;
+  }
+}
