@@ -100,19 +100,19 @@ model Version {
 }
 
 model ComplianceLog {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Using gen_random_uuid() instead
-  tenantId     String   @map("tenant_id")
-  eventType    String   @map("event_type")
-  content      String
-  metadata     Json?
-  filterResult Json?    @map("filter_result")
-  createdAt    DateTime @default(now()) @map("created_at")
-  sourceIp     String?  @map("source_ip")
-  userId       String?  @map("user_id")
-  user         User?    @relation(fields: [userId], references: [id]) // Add this relation field
+  id          Int      @default(autoincrement())
+  tenantId    String
+  eventType   String
+  resourceId  String?
+  userId      String?
+  description String
+  metadata    Json?
+  createdAt   DateTime @default(now())
 
+  @@id([id, createdAt])
   @@index([tenantId])
-  @@index([createdAt])
   @@index([eventType])
-  @@map("compliance_log")
+  @@index([resourceId])
+  @@index([userId])
+  @@index([createdAt])
 }

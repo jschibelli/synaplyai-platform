@@ -1,48 +1,76 @@
-import { Redis } from 'ioredis';
-import { BreakerState } from './tenant-breaker';
+import { createClient } from 'redis';
+import { CircuitBreakerStore, CircuitState } from './interfaces';
 
-export class RedisStore {
-  private readonly TTL = 24 * 60 * 60; // 24 hours in seconds
+export class RedisCircuitBreakerStore implements CircuitBreakerStore {
+  private client;
+  private keyPrefix: string;
+  private expirySeconds: number;
   
-  constructor(private redis: Redis) {}
-  
-  async getState(tenantId: string, service: string): Promise<BreakerState> {
-    const state = await this.redis.get(`circuit:${tenantId}:${service}:state`);
-    return (state as BreakerState) || BreakerState.CLOSED;
+  constructor(redisUrl: string, keyPrefix: string = 'circuit:', expirySeconds: number = 86400) {
+    this.client = createClient({ url: redisUrl });
+    this.keyPrefix = keyPrefix;
+    this.expirySeconds = expirySeconds;
+    
+    // Connect to Redis
+    this.client.connect().catch(err => {
+      console.error('Redis connection error:', err);
+    });
   }
   
-  async setState(tenantId: string, service: string, state: BreakerState): Promise<void> {
-    await this.redis.set(`circuit:${tenantId}:${service}:state`, state, 'EX', this.TTL);
+  private getStateKey(key: string): string {
+    return `${this.keyPrefix}${key}:state`;
   }
   
-  async incrementFailure(tenantId: string, service: string): Promise<number> {
-    const result = await this.redis.hincrby(`circuit:${tenantId}:${service}:counters`, 'failures', 1);
-    await this.redis.expire(`circuit:${tenantId}:${service}:counters`, this.TTL);
+  private getFailureKey(key: string): string {
+    return `${this.keyPrefix}${key}:failures`;
+  }
+  
+  private getSuccessKey(key: string): string {
+    return `${this.keyPrefix}${key}:successes`;
+  }
+  
+  private getLastChangeKey(key: string): string {
+    return `${this.keyPrefix}${key}:lastChange`;
+  }
+  
+  async getState(key: string): Promise<CircuitState> {
+    const state = await this.client.get(this.getStateKey(key));
+    return (state as CircuitState) || CircuitState.CLOSED;
+  }
+  
+  async setState(key: string, state: CircuitState): Promise<void> {
+    await this.client.set(this.getStateKey(key), state, { EX: this.expirySeconds });
+  }
+  
+  async incrementFailures(key: string): Promise<number> {
+    const result = await this.client.incr(this.getFailureKey(key));
+    await this.client.expire(this.getFailureKey(key), this.expirySeconds);
     return result;
   }
   
-  async incrementSuccess(tenantId: string, service: string): Promise<number> {
-    const result = await this.redis.hincrby(`circuit:${tenantId}:${service}:counters`, 'successes', 1);
-    await this.redis.expire(`circuit:${tenantId}:${service}:counters`, this.TTL);
+  async incrementSuccesses(key: string): Promise<number> {
+    const result = await this.client.incr(this.getSuccessKey(key));
+    await this.client.expire(this.getSuccessKey(key), this.expirySeconds);
     return result;
   }
   
-  async getCurrentAttempts(tenantId: string, service: string): Promise<number> {
-    const attempts = await this.redis.hget(`circuit:${tenantId}:${service}:counters`, 'attempts');
-    return attempts ? parseInt(attempts, 10) : 0;
+  async resetCounters(key: string): Promise<void> {
+    await Promise.all([
+      this.client.del(this.getFailureKey(key)),
+      this.client.del(this.getSuccessKey(key))
+    ]);
   }
   
-  async incrementAttempts(tenantId: string, service: string): Promise<number> {
-    const result = await this.redis.hincrby(`circuit:${tenantId}:${service}:counters`, 'attempts', 1);
-    await this.redis.expire(`circuit:${tenantId}:${service}:counters`, this.TTL);
-    return result;
+  async getLastStateChange(key: string): Promise<Date | null> {
+    const timestamp = await this.client.get(this.getLastChangeKey(key));
+    return timestamp ? new Date(parseInt(timestamp, 10)) : null;
   }
   
-  async resetCounters(tenantId: string, service: string): Promise<void> {
-    await this.redis.del(`circuit:${tenantId}:${service}:counters`);
-  }
-  
-  async resetAttempts(tenantId: string, service: string): Promise<void> {
-    await this.redis.hset(`circuit:${tenantId}:${service}:counters`, 'attempts', '0');
+  async setLastStateChange(key: string, timestamp: Date): Promise<void> {
+    await this.client.set(
+      this.getLastChangeKey(key), 
+      timestamp.getTime().toString(),
+      { EX: this.expirySeconds }
+    );
   }
 }

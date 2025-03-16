@@ -1,203 +1,207 @@
-import { Redis } from 'ioredis';
-import { RedisStore } from './redis-store';
+// src/circuit-breaker/tenant-breaker.ts
 import { EventEmitter } from 'events';
+import { CircuitBreaker, CircuitBreakerOptions, CircuitBreakerStore, CircuitState } from './interfaces';
+import { ComplianceLogger } from '../compliance/logger';
+import { MetricsCollector } from '../metrics/collector';
 
-export enum BreakerState {
-  CLOSED = 'CLOSED',
-  OPEN = 'OPEN',
-  HALF_OPEN = 'HALF_OPEN'
-}
-
-export interface BreakerConfig {
-  failureThreshold: number;
-  resetTimeout: number; // milliseconds
-  halfOpenAttempts: number;
-}
-
-export class TenantAwareCircuitBreaker {
-  private defaultConfig: BreakerConfig = {
-    failureThreshold: 5,
-    resetTimeout: 30000, // 30 seconds
-    halfOpenAttempts: 3
-  };
+export class TenantAwareCircuitBreaker implements CircuitBreaker {
+  private store: CircuitBreakerStore;
+  private tenantId: string;
+  private serviceName: string;
+  private options: CircuitBreakerOptions;
+  private metrics: MetricsCollector;
   private eventEmitter: EventEmitter;
-  private tenantConfigs: Map<string, BreakerConfig>;
-
+  
   constructor(
-    private redisStore: RedisStore,
-    private metrics?: any,
-    tenantConfigs?: Map<string, BreakerConfig>
+    store: CircuitBreakerStore,
+    tenantId: string,
+    serviceName: string,
+    metrics: MetricsCollector,
+    options: Partial<CircuitBreakerOptions> = {}
   ) {
-    this.tenantConfigs = tenantConfigs || new Map();
+    this.store = store;
+    this.tenantId = tenantId;
+    this.serviceName = serviceName;
+    this.metrics = metrics;
     this.eventEmitter = new EventEmitter();
+    
+    // Default options with overrides
+    this.options = {
+      failureThreshold: options.failureThreshold || 5,
+      successThreshold: options.successThreshold || 2,
+      resetTimeoutMs: options.resetTimeoutMs || 30000,
+      monitorIntervalMs: options.monitorIntervalMs || 5000
+    };
   }
-
-  getConfig(tenantId: string): BreakerConfig {
-    return this.tenantConfigs.get(tenantId) || this.defaultConfig;
+  
+  private get circuitKey(): string {
+    return `${this.tenantId}:${this.serviceName}`;
   }
-
-  async isAllowed(tenantId: string, service: string): Promise<boolean> {
-    const state = await this.redisStore.getState(tenantId, service);
-    
-    // Track check in metrics
-    if (this.metrics) {
-      await this.metrics.increment(`circuit.check.${service}.${state}`, tenantId);
-    }
-    
-    switch (state) {
-      case BreakerState.CLOSED:
-        return true;
-      case BreakerState.OPEN:
-        return false;
-      case BreakerState.HALF_OPEN:
-        // In half-open state, we allow limited traffic
-        const attempts = await this.redisStore.getCurrentAttempts(tenantId, service);
-        const config = this.getConfig(tenantId);
-        if (attempts < config.halfOpenAttempts) {
-          await this.redisStore.incrementAttempts(tenantId, service);
-          return true;
-        }
-        return false;
-      default:
-        return true;
-    }
+  
+  async getState(): Promise<CircuitState> {
+    return this.store.getState(this.circuitKey);
   }
-
-  async registerSuccess(tenantId: string, service: string): Promise<void> {
-    const state = await this.redisStore.getState(tenantId, service);
+  
+  async reset(): Promise<void> {
+    await this.store.setState(this.circuitKey, CircuitState.CLOSED);
+    await this.store.resetCounters(this.circuitKey);
+    await this.store.setLastStateChange(this.circuitKey, new Date());
     
-    if (this.metrics) {
-      await this.metrics.increment(`circuit.success.${service}`, tenantId);
-    }
+    this.eventEmitter.emit('circuitReset', {
+      tenantId: this.tenantId,
+      serviceName: this.serviceName,
+      state: CircuitState.CLOSED,
+      timestamp: new Date()
+    });
     
-    if (state === BreakerState.HALF_OPEN) {
-      const successes = await this.redisStore.incrementSuccess(tenantId, service);
-      const config = this.getConfig(tenantId);
+    await ComplianceLogger.log({
+      eventType: 'circuit.reset',
+      resourceId: this.serviceName,
+      description: `Circuit breaker reset for service: ${this.serviceName}`,
+      metadata: { tenantId: this.tenantId }
+    });
+    
+    // Update metrics
+    this.metrics.setCircuitBreakerState(this.tenantId, this.serviceName, CircuitState.CLOSED);
+  }
+  
+  async execute<T>(command: () => Promise<T>): Promise<T> {
+    const currentState = await this.getState();
+    
+    // If circuit is open, fail fast
+    if (currentState === CircuitState.OPEN) {
+      const lastChange = await this.store.getLastStateChange(this.circuitKey);
+      const now = new Date();
       
-      if (successes >= config.halfOpenAttempts) {
-        await this.transitionState(tenantId, service, BreakerState.CLOSED);
-        await this.redisStore.resetCounters(tenantId, service);
-      }
-    }
-  }
-
-  async registerFailure(tenantId: string, service: string): Promise<void> {
-    const state = await this.redisStore.getState(tenantId, service);
-    
-    if (this.metrics) {
-      await this.metrics.increment(`circuit.failure.${service}`, tenantId);
-    }
-    
-    if (state === BreakerState.CLOSED) {
-      const failures = await this.redisStore.incrementFailure(tenantId, service);
-      const config = this.getConfig(tenantId);
-      
-      if (failures >= config.failureThreshold) {
-        await this.transitionState(tenantId, service, BreakerState.OPEN);
+      // Check if it's time to try again (half-open)
+      if (lastChange && (now.getTime() - lastChange.getTime()) >= this.options.resetTimeoutMs) {
+        await this.store.setState(this.circuitKey, CircuitState.HALF_OPEN);
+        await this.store.setLastStateChange(this.circuitKey, now);
         
-        // Schedule reset to half-open
-        setTimeout(async () => {
-          const currentState = await this.redisStore.getState(tenantId, service);
-          if (currentState === BreakerState.OPEN) {
-            await this.transitionState(tenantId, service, BreakerState.HALF_OPEN);
-            await this.redisStore.resetAttempts(tenantId, service);
-          }
-        }, this.getConfig(tenantId).resetTimeout);
+        this.eventEmitter.emit('circuitStateChanged', {
+          tenantId: this.tenantId,
+          serviceName: this.serviceName,
+          state: CircuitState.HALF_OPEN,
+          timestamp: now
+        });
+        
+        await ComplianceLogger.log({
+          eventType: 'circuit.half_open',
+          resourceId: this.serviceName,
+          description: `Circuit breaker half-opened for service: ${this.serviceName}`,
+          metadata: { tenantId: this.tenantId }
+        });
+        
+        // Update metrics
+        this.metrics.setCircuitBreakerState(this.tenantId, this.serviceName, CircuitState.HALF_OPEN);
+      } else {
+        // Circuit is still open, throw error
+        this.metrics.incrementCircuitBreakerRejections(this.tenantId, this.serviceName);
+        
+        throw new Error(`Circuit for ${this.serviceName} is OPEN for tenant ${this.tenantId}`);
       }
-    } else if (state === BreakerState.HALF_OPEN) {
-      // Immediate trip back to open on failure during half-open state
-      await this.transitionState(tenantId, service, BreakerState.OPEN);
-    }
-  }
-
-  // Execute a function with circuit breaker protection
-  async execute<T>(tenantId: string, service: string, fn: () => Promise<T>): Promise<T> {
-    if (!(await this.isAllowed(tenantId, service))) {
-      throw new Error(`Circuit breaker for ${service} is open for tenant ${tenantId}`);
     }
     
     try {
-      const result = await fn();
-      await this.registerSuccess(tenantId, service);
+      // Attempt to execute the command
+      const result = await command();
+      
+      // Command succeeded
+      if (currentState === CircuitState.HALF_OPEN) {
+        // In half-open state, increment success counter
+        const successes = await this.store.incrementSuccesses(this.circuitKey);
+        
+        if (successes >= this.options.successThreshold) {
+          // Enough successes, close the circuit
+          await this.store.setState(this.circuitKey, CircuitState.CLOSED);
+          await this.store.resetCounters(this.circuitKey);
+          await this.store.setLastStateChange(this.circuitKey, new Date());
+          
+          this.eventEmitter.emit('circuitStateChanged', {
+            tenantId: this.tenantId,
+            serviceName: this.serviceName,
+            state: CircuitState.CLOSED,
+            timestamp: new Date()
+          });
+          
+          await ComplianceLogger.log({
+            eventType: 'circuit.closed',
+            resourceId: this.serviceName,
+            description: `Circuit breaker closed for service: ${this.serviceName}`,
+            metadata: { tenantId: this.tenantId, successes }
+          });
+          
+          // Update metrics
+          this.metrics.setCircuitBreakerState(this.tenantId, this.serviceName, CircuitState.CLOSED);
+        }
+      } else {
+        // In closed state, reset failure counter on success
+        await this.store.resetCounters(this.circuitKey);
+      }
+      
       return result;
     } catch (error) {
-      await this.registerFailure(tenantId, service);
+      // Command failed
+      if (currentState === CircuitState.HALF_OPEN) {
+        // In half-open state, immediately open the circuit again
+        await this.store.setState(this.circuitKey, CircuitState.OPEN);
+        await this.store.resetCounters(this.circuitKey);
+        await this.store.setLastStateChange(this.circuitKey, new Date());
+        
+        this.eventEmitter.emit('circuitStateChanged', {
+          tenantId: this.tenantId,
+          serviceName: this.serviceName,
+          state: CircuitState.OPEN,
+          timestamp: new Date()
+        });
+        
+        await ComplianceLogger.log({
+          eventType: 'circuit.opened',
+          resourceId: this.serviceName,
+          description: `Circuit breaker opened for service: ${this.serviceName}`,
+          metadata: { tenantId: this.tenantId, error: error.message }
+        });
+        
+        // Update metrics
+        this.metrics.setCircuitBreakerState(this.tenantId, this.serviceName, CircuitState.OPEN);
+      } else {
+        // In closed state, increment failure counter
+        const failures = await this.store.incrementFailures(this.circuitKey);
+        
+        // Record the failure in metrics
+        this.metrics.incrementCircuitBreakerFailures(this.tenantId, this.serviceName);
+        
+        if (failures >= this.options.failureThreshold) {
+          // Too many failures, open the circuit
+          await this.store.setState(this.circuitKey, CircuitState.OPEN);
+          await this.store.setLastStateChange(this.circuitKey, new Date());
+          
+          this.eventEmitter.emit('circuitStateChanged', {
+            tenantId: this.tenantId,
+            serviceName: this.serviceName,
+            state: CircuitState.OPEN,
+            timestamp: new Date()
+          });
+          
+          await ComplianceLogger.log({
+            eventType: 'circuit.opened',
+            resourceId: this.serviceName,
+            description: `Circuit breaker opened for service: ${this.serviceName}`,
+            metadata: { tenantId: this.tenantId, failures, error: error.message }
+          });
+          
+          // Update metrics
+          this.metrics.setCircuitBreakerState(this.tenantId, this.serviceName, CircuitState.OPEN);
+        }
+      }
+      
+      // Rethrow the error
       throw error;
     }
   }
-
-  private async transitionState(tenantId: string, service: string, newState: BreakerState): Promise<void> {
-    const prevState = await this.redisStore.getState(tenantId, service);
-    await this.redisStore.setState(tenantId, service, newState);
-    
-    // Track state transitions for dashboard visibility
-    if (this.metrics) {
-      await this.metrics.increment(`circuit.transition.${prevState}-to-${newState}`, tenantId);
-    }
-    
-    // Emit event for real-time dashboard updates
-    this.eventEmitter.emit('circuit-state-change', {
-      tenantId,
-      service,
-      prevState,
-      newState,
-      timestamp: Date.now()
-    });
-  }
-
-  // Add event listener for dashboard updates
-  onStateChange(listener: (event: any) => void): void {
-    this.eventEmitter.on('circuit-state-change', listener);
-  }
-
-  // Remove event listener
-  offStateChange(listener: (event: any) => void): void {
-    this.eventEmitter.off('circuit-state-change', listener);
-  }
-}
-
-export class RedisStore {
-  private readonly TTL = 24 * 60 * 60; // 24 hours in seconds
   
-  constructor(private redis: Redis) {}
-  
-  async getState(tenantId: string, service: string): Promise<BreakerState> {
-    const state = await this.redis.get(`circuit:${tenantId}:${service}:state`);
-    return (state as BreakerState) || BreakerState.CLOSED;
-  }
-  
-  async setState(tenantId: string, service: string, state: BreakerState): Promise<void> {
-    await this.redis.set(`circuit:${tenantId}:${service}:state`, state, 'EX', this.TTL);
-  }
-  
-  async incrementFailure(tenantId: string, service: string): Promise<number> {
-    const result = await this.redis.hincrby(`circuit:${tenantId}:${service}:counters`, 'failures', 1);
-    await this.redis.expire(`circuit:${tenantId}:${service}:counters`, this.TTL);
-    return result;
-  }
-  
-  async incrementSuccess(tenantId: string, service: string): Promise<number> {
-    const result = await this.redis.hincrby(`circuit:${tenantId}:${service}:counters`, 'successes', 1);
-    await this.redis.expire(`circuit:${tenantId}:${service}:counters`, this.TTL);
-    return result;
-  }
-  
-  async getCurrentAttempts(tenantId: string, service: string): Promise<number> {
-    const attempts = await this.redis.hget(`circuit:${tenantId}:${service}:counters`, 'attempts');
-    return attempts ? parseInt(attempts, 10) : 0;
-  }
-  
-  async incrementAttempts(tenantId: string, service: string): Promise<number> {
-    const result = await this.redis.hincrby(`circuit:${tenantId}:${service}:counters`, 'attempts', 1);
-    await this.redis.expire(`circuit:${tenantId}:${service}:counters`, this.TTL);
-    return result;
-  }
-  
-  async resetCounters(tenantId: string, service: string): Promise<void> {
-    await this.redis.del(`circuit:${tenantId}:${service}:counters`);
-  }
-  
-  async resetAttempts(tenantId: string, service: string): Promise<void> {
-    await this.redis.hset(`circuit:${tenantId}:${service}:counters`, 'attempts', '0');
+  on(event: string, listener: (...args: any[]) => void): this {
+    this.eventEmitter.on(event, listener);
+    return this;
   }
 }
