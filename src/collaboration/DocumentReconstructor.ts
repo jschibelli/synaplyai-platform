@@ -1,20 +1,39 @@
 import { EventStore, Event } from './events/EventStore';
 import { SnapshotStore, Snapshot } from './snapshots/SnapshotStore';
-import { OperationalTransform, Operation } from './conflict/OperationalTransform';
+import { OperationalTransform } from './conflict/OperationalTransform';
 import { MetricsCollector } from '../metrics/collector';
 import { getTenantContext } from '../lib/tenant-context';
 
-interface DocumentState {
+export interface DocumentState {
+  documentId: string;
   content: string;
   formatting: Record<string, any>;
   metadata: Record<string, any>;
   version: number;
+  lastModified: number;
+}
+
+export interface ReconstructionOptions {
+  version?: number;
+  timestamp?: number;
+  includeSnapshots?: boolean;
+  useCache?: boolean;
+  applyTransforms?: boolean;
 }
 
 /**
- * Reconstructs document state from events with snapshot optimization
+ * Responsible for reconstructing document state from events
+ * and managing snapshots for optimization
  */
 export class DocumentReconstructor {
+  private documentCache = new Map<string, { 
+    document: DocumentState;
+    expiresAt: number;
+  }>();
+  
+  private readonly CACHE_TTL_MS = 60 * 1000; // 1 minute
+  private readonly MAX_CACHE_SIZE = 100;
+  
   constructor(
     private eventStore: EventStore,
     private snapshotStore: SnapshotStore,
@@ -23,236 +42,470 @@ export class DocumentReconstructor {
   ) {}
   
   /**
-   * Reconstructs document state from events with snapshot optimization
-   * 
+   * Reconstruct document state from events and snapshots
    * @param documentId Document identifier
-   * @param toVersion Target version to reconstruct (optional, defaults to latest)
+   * @param options Reconstruction options
    * @returns Reconstructed document state
    */
-  async reconstructDocument(documentId: string, toVersion?: number): Promise<DocumentState> {
+  async reconstructDocument(
+    documentId: string,
+    options: ReconstructionOptions = {}
+  ): Promise<DocumentState> {
+    const startTime = performance.now();
     const tenantContext = getTenantContext();
+    
     if (!tenantContext?.tenantId) {
       throw new Error('Cannot reconstruct document: No tenant context available');
     }
     
-    const startTime = performance.now();
-    
     try {
-      // First try to get the latest snapshot before target version
-      const snapshot = await this.snapshotStore.getLatestSnapshot(documentId);
+      const cacheKey = `${tenantContext.tenantId}:${documentId}:${options.version || 'latest'}`;
       
-      // Start with snapshot state or empty state
-      let state: DocumentState = snapshot?.state || {
-        content: '',
-        formatting: {},
-        metadata: {},
-        version: 0
-      };
-      
-      // If we have a snapshot, only replay events after the snapshot version
-      const fromVersion = snapshot ? snapshot.version : 0;
-      
-      // Replay events to reconstruct current state
-      const events = await this.eventStore.replayEvents(documentId, fromVersion);
-      
-      // Filter events up to target version if specified
-      const filteredEvents = toVersion !== undefined 
-        ? events.filter(event => event.version <= toVersion)
-        : events;
-      
-      // Apply events to state
-      for (const event of filteredEvents) {
-        state = this.applyEvent(state, event);
+      // Check cache first if enabled
+      if (options.useCache !== false) {
+        const cachedDocument = this.getCachedDocument(cacheKey);
+        if (cachedDocument) {
+          // Return cached document if available
+          return cachedDocument;
+        }
       }
       
-      // Record metrics
-      const duration = performance.now() - startTime;
-      await this.metricsCollector.recordLatency('document.reconstruction', duration);
-      await this.metricsCollector.track('document.reconstructed', 1, {
-        tenantId: tenantContext.tenantId,
-        documentId,
-        fromSnapshot: Boolean(snapshot),
-        eventCount: filteredEvents.length
-      });
+      let document: DocumentState;
+      let startingVersion = 0;
       
-      // Check if we should create a snapshot based on performance or event count
-      if (duration > 50 || filteredEvents.length > 50) {
-        this.createSnapshotInBackground(documentId, state).catch(error => {
-          console.error('Failed to create document snapshot:', error);
+      // Use snapshot if available and not explicitly disabled
+      if (options.includeSnapshots !== false) {
+        const snapshot = options.version 
+          ? await this.snapshotStore.getSnapshotAtVersion(documentId, options.version)
+          : await this.snapshotStore.getLatestSnapshot(documentId);
+          
+        if (snapshot) {
+          // Start from snapshot state
+          document = this.snapshotToDocumentState(snapshot);
+          startingVersion = snapshot.version;
+          
+          await this.metricsCollector.increment('document.reconstruction.fromSnapshot', 1, {
+            documentId,
+            snapshotVersion: snapshot.version.toString()
+          });
+        } else {
+          // No snapshot available, start with empty document
+          document = this.createEmptyDocument(documentId);
+          await this.metricsCollector.increment('document.reconstruction.fromScratch', 1, {
+            documentId
+          });
+        }
+      } else {
+        // Snapshots explicitly disabled, start with empty document
+        document = this.createEmptyDocument(documentId);
+        await this.metricsCollector.increment('document.reconstruction.fromScratch', 1, {
+          documentId
         });
       }
       
-      return state;
-    } catch (error) {
+      // Get events after snapshot version
+      const events = await this.eventStore.replayEvents(
+        documentId, 
+        startingVersion + 1,
+        { useCache: options.useCache }
+      );
+      
+      // Apply each event to build up the document state
+      for (const event of events) {
+        // Stop at target version if specified
+        if (options.version !== undefined && event.version && event.version > options.version) {
+          break;
+        }
+        
+        // Stop at target timestamp if specified
+        if (options.timestamp !== undefined && event.timestamp && event.timestamp > options.timestamp) {
+          break;
+        }
+        
+        // Apply the event to document state
+        document = this.applyEvent(document, event, options.applyTransforms);
+      }
+      
+      // Cache the reconstructed document if caching is enabled
+      if (options.useCache !== false) {
+        this.cacheDocument(cacheKey, document);
+      }
+      
+      // Check if we should create a new snapshot
+      this.checkAndCreateSnapshot(documentId, document);
+      
+      // Record metrics
       const duration = performance.now() - startTime;
-      await this.metricsCollector.recordLatency('document.reconstruction.error', duration);
+      await this.metricsCollector.recordLatency('document.reconstruction', duration, {
+        documentId,
+        eventsApplied: events.length.toString()
+      });
+      
+      return document;
+    } catch (error) {
+      // Log and re-throw the error
+      await this.metricsCollector.increment('document.reconstruction.error', 1, {
+        documentId,
+        errorType: error instanceof Error ? error.name : 'unknown'
+      });
+      
+      console.error('Error reconstructing document:', error);
       throw error;
     }
   }
   
   /**
-   * Applies an event to the document state
-   * 
-   * @param state Current document state
-   * @param event Event to apply
-   * @returns Updated document state
+   * Create a snapshot of the current document state
+   * @param documentId Document identifier
+   * @returns Created snapshot
    */
-  private applyEvent(state: DocumentState, event: Event): DocumentState {
-    // Start with a copy of the current state
-    const newState = { ...state };
+  async createSnapshot(documentId: string): Promise<Snapshot> {
+    const document = await this.reconstructDocument(documentId);
+    
+    const snapshot = await this.snapshotStore.createSnapshot(
+      documentId,
+      {
+        content: document.content,
+        formatting: document.formatting,
+        metadata: document.metadata
+      },
+      document.version
+    );
+    
+    await this.metricsCollector.increment('document.snapshot.created', 1, {
+      documentId,
+      version: document.version.toString()
+    });
+    
+    // Invalidate cache after snapshot creation
+    this.invalidateDocumentCache(documentId);
+    
+    return snapshot;
+  }
+  
+  /**
+   * Apply an event to the document state
+   * @private
+   */
+  private applyEvent(document: DocumentState, event: Event, applyTransforms = true): DocumentState {
+    // Create a copy to avoid modifying original
+    const updatedDocument = { ...document };
     
     // Update version
-    newState.version = event.version;
+    if (event.version) {
+      updatedDocument.version = event.version;
+    }
     
-    // Apply different event types
+    // Update last modified timestamp
+    if (event.timestamp) {
+      updatedDocument.lastModified = event.timestamp;
+    }
+    
+    // Apply event based on type
     switch (event.type) {
+      case 'DOCUMENT_CREATED':
+        return this.handleDocumentCreated(updatedDocument, event);
+        
       case 'INSERT_TEXT':
-        return this.applyInsertText(newState, event);
+        return this.handleInsertText(updatedDocument, event, applyTransforms);
         
       case 'DELETE_TEXT':
-        return this.applyDeleteText(newState, event);
+        return this.handleDeleteText(updatedDocument, event, applyTransforms);
         
       case 'FORMAT_TEXT':
-        return this.applyFormatText(newState, event);
+        return this.handleFormatText(updatedDocument, event);
         
       case 'SET_METADATA':
-        return this.applySetMetadata(newState, event);
+        return this.handleSetMetadata(updatedDocument, event);
         
       default:
-        // Unknown event type, just return state as is
         console.warn(`Unknown event type: ${event.type}`);
-        return newState;
+        return updatedDocument;
     }
   }
   
   /**
-   * Applies INSERT_TEXT event
+   * Handle DOCUMENT_CREATED event
+   * @private
    */
-  private applyInsertText(state: DocumentState, event: Event): DocumentState {
-    const operation: Operation = {
-      type: 'insert',
-      position: event.payload.position,
-      content: event.payload.text
-    };
-    
-    const newContent = this.operationalTransform.applyOperation(
-      state.content, 
-      operation
-    );
-    
+  private handleDocumentCreated(document: DocumentState, event: Event): DocumentState {
     return {
-      ...state,
-      content: newContent
-    };
-  }
-  
-  /**
-   * Applies DELETE_TEXT event
-   */
-  private applyDeleteText(state: DocumentState, event: Event): DocumentState {
-    const operation: Operation = {
-      type: 'delete',
-      position: event.payload.position,
-      length: event.payload.length
-    };
-    
-    const newContent = this.operationalTransform.applyOperation(
-      state.content, 
-      operation
-    );
-    
-    return {
-      ...state,
-      content: newContent
-    };
-  }
-  
-  /**
-   * Applies FORMAT_TEXT event
-   */
-  private applyFormatText(state: DocumentState, event: Event): DocumentState {
-    const { position, length, attributes } = event.payload;
-    const formattingKey = `${position}:${length}`;
-    
-    return {
-      ...state,
-      formatting: {
-        ...state.formatting,
-        [formattingKey]: {
-          ...state.formatting[formattingKey],
-          ...attributes
-        }
-      }
-    };
-  }
-  
-  /**
-   * Applies SET_METADATA event
-   */
-  private applySetMetadata(state: DocumentState, event: Event): DocumentState {
-    const { key, value } = event.payload;
-    
-    return {
-      ...state,
+      ...document,
+      content: event.payload.content || '',
       metadata: {
-        ...state.metadata,
-        [key]: value
+        ...document.metadata,
+        title: event.payload.title || 'Untitled Document',
+        createdBy: event.userId,
+        createdAt: event.timestamp,
+        ...event.payload.metadata
       }
     };
   }
   
   /**
-   * Creates a snapshot in the background
-   * 
-   * @param documentId Document identifier
-   * @param state Current document state
+   * Handle INSERT_TEXT event
+   * @private
    */
-  private async createSnapshotInBackground(documentId: string, state: DocumentState): Promise<void> {
+  private handleInsertText(document: DocumentState, event: Event, applyTransforms: boolean): DocumentState {
+    const { position, text } = event.payload;
+    
+    if (typeof position !== 'number' || typeof text !== 'string') {
+      console.warn('Invalid INSERT_TEXT event payload:', event.payload);
+      return document;
+    }
+    
+    let newContent: string;
+    
+    if (applyTransforms) {
+      // Apply operational transform if needed
+      const operation = {
+        type: 'insert',
+        position,
+        content: text
+      };
+      
+      const metadata = event.metadata || {};
+      if (metadata.vectorClock) {
+        // TODO: Apply operational transform using vector clock
+        // This would transform the operation against concurrent operations
+        // For now, we're just applying the operation directly
+      }
+      
+      newContent = 
+        document.content.substring(0, position) + 
+        text + 
+        document.content.substring(position);
+    } else {
+      // Simple insert without transforms
+      newContent = 
+        document.content.substring(0, position) + 
+        text + 
+        document.content.substring(position);
+    }
+    
+    return {
+      ...document,
+      content: newContent
+    };
+  }
+  
+  /**
+   * Handle DELETE_TEXT event
+   * @private
+   */
+  private handleDeleteText(document: DocumentState, event: Event, applyTransforms: boolean): DocumentState {
+    const { position, length } = event.payload;
+    
+    if (typeof position !== 'number' || typeof length !== 'number') {
+      console.warn('Invalid DELETE_TEXT event payload:', event.payload);
+      return document;
+    }
+    
+    let newContent: string;
+    
+    if (applyTransforms) {
+      // Apply operational transform if needed
+      const operation = {
+        type: 'delete',
+        position,
+        length
+      };
+      
+      const metadata = event.metadata || {};
+      if (metadata.vectorClock) {
+        // TODO: Apply operational transform using vector clock
+        // For now, we're just applying the operation directly
+      }
+      
+      newContent = 
+        document.content.substring(0, position) + 
+        document.content.substring(position + length);
+    } else {
+      // Simple delete without transforms
+      newContent = 
+        document.content.substring(0, position) + 
+        document.content.substring(position + length);
+    }
+    
+    return {
+      ...document,
+      content: newContent
+    };
+  }
+  
+  /**
+   * Handle FORMAT_TEXT event
+   * @private
+   */
+  private handleFormatText(document: DocumentState, event: Event): DocumentState {
+    const { position, length, attributes } = event.payload;
+    
+    if (
+      typeof position !== 'number' || 
+      typeof length !== 'number' || 
+      !attributes
+    ) {
+      console.warn('Invalid FORMAT_TEXT event payload:', event.payload);
+      return document;
+    }
+    
+    // Create a copy of formatting
+    const newFormatting = { ...document.formatting };
+    
+    // Create a range key for this formatting
+    const rangeKey = `${position}:${position + length}`;
+    
+    // Update or set formatting for this range
+    newFormatting[rangeKey] = {
+      ...(newFormatting[rangeKey] || {}),
+      ...attributes
+    };
+    
+    return {
+      ...document,
+      formatting: newFormatting
+    };
+  }
+  
+  /**
+   * Handle SET_METADATA event
+   * @private
+   */
+  private handleSetMetadata(document: DocumentState, event: Event): DocumentState {
+    const { metadata } = event.payload;
+    
+    if (!metadata || typeof metadata !== 'object') {
+      console.warn('Invalid SET_METADATA event payload:', event.payload);
+      return document;
+    }
+    
+    return {
+      ...document,
+      metadata: {
+        ...document.metadata,
+        ...metadata,
+        lastModifiedBy: event.userId,
+        lastModifiedAt: event.timestamp
+      }
+    };
+  }
+  
+  /**
+   * Convert a snapshot to document state
+   * @private
+   */
+  private snapshotToDocumentState(snapshot: Snapshot): DocumentState {
+    return {
+      documentId: snapshot.documentId,
+      content: snapshot.state.content || '',
+      formatting: snapshot.state.formatting || {},
+      metadata: snapshot.state.metadata || {},
+      version: snapshot.version,
+      lastModified: snapshot.timestamp
+    };
+  }
+  
+  /**
+   * Create an empty document state
+   * @private
+   */
+  private createEmptyDocument(documentId: string): DocumentState {
+    return {
+      documentId,
+      content: '',
+      formatting: {},
+      metadata: {},
+      version: 0,
+      lastModified: Date.now()
+    };
+  }
+  
+  /**
+   * Check if we should create a new snapshot and create one if needed
+   * @private
+   */
+  private async checkAndCreateSnapshot(documentId: string, document: DocumentState): Promise<void> {
     try {
-      // Check if we should create a new snapshot
+      // Use the snapshot store to determine if we should create a snapshot
       const shouldCreateSnapshot = await this.snapshotStore.shouldCreateSnapshot(documentId);
       
       if (shouldCreateSnapshot) {
-        await this.snapshotStore.createSnapshot(documentId, state, state.version);
-        
-        await this.metricsCollector.track('document.snapshot.created', 1, {
+        // Create snapshot asynchronously without blocking the document reconstruction
+        this.snapshotStore.createSnapshot(
           documentId,
-          version: state.version
+          {
+            content: document.content,
+            formatting: document.formatting,
+            metadata: document.metadata
+          },
+          document.version
+        ).catch(error => {
+          console.error('Failed to create snapshot:', error);
+        });
+        
+        await this.metricsCollector.increment('document.snapshot.triggered', 1, {
+          documentId,
+          version: document.version.toString()
         });
       }
     } catch (error) {
-      console.error('Failed to create snapshot:', error);
-      await this.metricsCollector.track('document.snapshot.error', 1, {
-        documentId,
-        error: (error as Error).message
-      });
+      console.error('Error checking if snapshot should be created:', error);
     }
   }
   
   /**
-   * Gets document at a specific point in time
-   * 
-   * @param documentId Document identifier
-   * @param timestamp Timestamp to reconstruct at
-   * @returns Document state at the specified time
+   * Cache a document for faster retrieval
+   * @private
    */
-  async getDocumentAtTime(documentId: string, timestamp: number): Promise<DocumentState> {
-    // Find the version at or before the specified timestamp
-    const events = await this.eventStore.getEventsBeforeTime(documentId, timestamp);
-    
-    if (events.length === 0) {
-      return {
-        content: '',
-        formatting: {},
-        metadata: {},
-        version: 0
-      };
+  private cacheDocument(key: string, document: DocumentState): void {
+    // Clean up old entries if the cache is too big
+    if (this.documentCache.size >= this.MAX_CACHE_SIZE) {
+      const oldestKey = this.documentCache.keys().next().value;
+      this.documentCache.delete(oldestKey);
     }
     
-    // Get the latest version before or at the timestamp
-    const targetVersion = events[events.length - 1].version;
+    // Cache the document with an expiration time
+    this.documentCache.set(key, {
+      document: { ...document },
+      expiresAt: Date.now() + this.CACHE_TTL_MS
+    });
+  }
+  
+  /**
+   * Get a document from cache if it exists and is not expired
+   * @private
+   */
+  private getCachedDocument(key: string): DocumentState | null {
+    const cached = this.documentCache.get(key);
     
-    // Reconstruct document to that version
-    return this.reconstructDocument(documentId, targetVersion);
+    if (!cached) {
+      return null;
+    }
+    
+    // Check if cache entry has expired
+    if (cached.expiresAt < Date.now()) {
+      this.documentCache.delete(key);
+      return null;
+    }
+    
+    return { ...cached.document };
+  }
+  
+  /**
+   * Invalidate cache entries for a document
+   * @private
+   */
+  private invalidateDocumentCache(documentId: string): void {
+    const tenantContext = getTenantContext();
+    if (!tenantContext?.tenantId) return;
+    
+    const prefix = `${tenantContext.tenantId}:${documentId}:`;
+    
+    // Remove all cache entries for this document
+    for (const key of this.documentCache.keys()) {
+      if (key.startsWith(prefix)) {
+        this.documentCache.delete(key);
+      }
+    }
   }
 }
