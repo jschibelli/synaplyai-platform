@@ -1,4 +1,4 @@
-import { getTenantContext } from '../lib/tenant-context'; // Make sure this matches your mock
+import { getCurrentTenantContext as getTenantContext } from '../lib/tenant-context';
 import { MetricsCollector } from '../metrics/collector';
 
 /**

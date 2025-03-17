@@ -1,34 +1,31 @@
 import { CursorManager } from '../../src/collaboration/CursorManager';
 import { MetricsCollector } from '../../src/metrics/collector';
 import { TenantContext } from '../../src/lib/tenant-context';
-import { RedisMetricsClient } from '../../src/metrics/redis-client';
-import Redis from 'ioredis';
 
-// Create mock implementations
-const mockRedisClient = {
-  incrementCounter: jest.fn(),
-  recordLatency: jest.fn(),
-  getPercentileLatency: jest.fn(),
-  getAverageLatency: jest.fn(),
-  setCircuitBreakerState: jest.fn(),
-  getCircuitBreakerState: jest.fn(),
-  getFilterLatency: jest.fn(),
-  getPipelineMetrics: jest.fn(),
-  incrementFilterResult: jest.fn(),
-  getBucketKey: jest.fn(),
-  getSpecificBucketKey: jest.fn(),
-  increment: jest.fn(),
-  recordValue: jest.fn(),
-  getMetricValue: jest.fn(),
-  getMetricCounts: jest.fn(),
-  getFilterResultCounts: jest.fn(),
-  getPipelineLatency: jest.fn(),
-  pipeline: jest.fn(() => ({
-    exec: jest.fn().mockResolvedValue([])
-  }))
-} as unknown as RedisMetricsClient;
+// Create interface for mock metrics collector
+interface MockMetricsCollector {
+  track(name: string, value: number, tags?: Record<string, string>): void;
+  increment(name: string, tenantId?: string, value?: number): Promise<void>;
+  recordLatency(name: string, latencyMs: number, tenantId?: string): Promise<void>;
+  getPercentileLatency(name: string, tenantId?: string, percentile?: number, window?: number): Promise<number>;
+  setCircuitBreakerState(tenantId: string, serviceName: string, state: any): Promise<void>;
+  getCircuitBreakerState(tenantId: string, serviceName: string): Promise<string>;
+  incrementCircuitBreakerFailures(tenantId: string, serviceName: string): Promise<void>;
+  incrementCircuitBreakerRejections(tenantId: string, serviceName: string): Promise<void>;
+  incrementFilterResult(filterName: string, result: any): Promise<void>;
+  recordFilterLatency(filterName: string, latencyMs: number): Promise<void>;
+  recordPipelineLatency(latencyMs: number): Promise<void>;
+  incrementPipelineResult(result: any): Promise<void>;
+  incrementPipelineErrors(): Promise<void>;
+  trackIdentifier(name: string, id: string): void;
+  trackEvent(name: string): void;
+  trackValue(name: string, value: number): void;
+  getFilterResults(): Record<string, number>;
+  getPipelineLatency(): number;
+}
 
-const mockMetricsCollector = {
+// Mock MetricsCollector with redisClient
+const mockMetricsCollector: MockMetricsCollector = {
   track: jest.fn(),
   increment: jest.fn(),
   recordLatency: jest.fn(),
@@ -44,17 +41,18 @@ const mockMetricsCollector = {
   incrementPipelineErrors: jest.fn(),
   trackIdentifier: jest.fn(),
   trackEvent: jest.fn(),
-  trackMetric: jest.fn(),
   trackValue: jest.fn(),
   getFilterResults: jest.fn(),
-  getPipelineLatency: jest.fn()
-} as unknown as MetricsCollector;
+  getPipelineLatency: jest.fn(),
+  redisClient: {} as any
+};
 
 // Mock the tenant context module
 jest.mock('../../src/lib/tenant-context', () => {
   let currentContext: TenantContext | null = null;
   return {
-    getTenantContext: jest.fn(() => currentContext),
+    getCurrentTenantContext: jest.fn(() => currentContext),
+    getTenantContext: jest.fn(() => currentContext), // Add this alias
     setTenantContext: jest.fn((ctx: TenantContext) => { currentContext = ctx; }),
     clearTenantContext: jest.fn(() => { currentContext = null; }),
   };
