@@ -1,5 +1,3 @@
-I've analyzed your project files and can provide an architectural overview for your README. The platform appears to be an enterprise-grade, multi-tenant AI content creation system with advanced collaboration features, usage tracking, and comprehensive tenant isolation.
-
 # SynaplyAI: Enterprise Multi-Tenant AI Content Platform
 
 ## Overview
