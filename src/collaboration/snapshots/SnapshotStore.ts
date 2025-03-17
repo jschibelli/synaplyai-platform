@@ -1,7 +1,15 @@
 import { PrismaClient } from '@prisma/client';
+import { DocumentId } from '../types';
 import { MetricsCollector } from '../../metrics/collector';
 import { getTenantContext } from '../../lib/tenant-context';
 import { v4 as uuidv4 } from 'uuid';
+
+export interface SnapshotMetadata {
+  version: number;
+  documentId: string;
+  timestamp: string;
+  eventCount: number;
+}
 
 /**
  * Represents a point-in-time snapshot of a document's state
@@ -10,11 +18,11 @@ export interface Snapshot {
   id: string;
   documentId: string;
   tenantId: string;
-  state: any;
   version: number;
-  timestamp: number;
-  lastEventId?: string;
-  metadata?: Record<string, any>;
+  data: any;
+  metadata: SnapshotMetadata;
+  timestamp: string;
+  createdBy?: string;
 }
 
 export interface SnapshotOptions {
@@ -23,7 +31,7 @@ export interface SnapshotOptions {
 }
 
 /**
- * Manages document snapshots for optimized state reconstruction
+ * Store for document snapshots
  */
 export class SnapshotStore {
   // Default thresholds for snapshot creation
@@ -47,170 +55,130 @@ export class SnapshotStore {
   
   /**
    * Creates a new snapshot for a document
-   * 
-   * @param documentId Document identifier
-   * @param state Document state to snapshot
-   * @param version Document version at snapshot time
-   * @param options Additional options
-   * @returns Created snapshot
    */
   async createSnapshot(
-    documentId: string,
-    state: any,
-    version: number,
-    options: SnapshotOptions = {}
+    documentId: DocumentId,
+    tenantId: string,
+    data: any,
+    metadata: SnapshotMetadata
   ): Promise<Snapshot> {
     const startTime = performance.now();
-    const tenantContext = getTenantContext();
-    
-    if (!tenantContext?.tenantId) {
-      throw new Error('Cannot create snapshot: No tenant context available');
-    }
     
     try {
-      // Create snapshot object
-      const snapshot: Snapshot = {
-        id: `snap-${uuidv4()}`,
-        documentId,
-        tenantId: tenantContext.tenantId,
-        state,
-        version,
-        timestamp: Date.now(),
-        metadata: options.metadata || {}
-      };
-      
-      // Use transaction client if provided, otherwise use prisma directly
-      const client = options.client || this.prisma;
-      
-      // Store snapshot in database
-      const storedSnapshot = await client.snapshot.create({
+      // Create snapshot in database
+      const snapshot = await this.prisma.snapshot.create({
         data: {
-          id: snapshot.id,
-          documentId: snapshot.documentId,
-          tenantId: snapshot.tenantId,
-          state: snapshot.state,
-          version: snapshot.version,
-          timestamp: snapshot.timestamp,
-          metadata: snapshot.metadata
+          documentId,
+          tenantId,
+          version: metadata.version,
+          data: JSON.stringify(data), // Serialize document data
+          metadata: JSON.stringify(metadata),
+          timestamp: new Date(metadata.timestamp).toISOString()
         }
       });
       
-      // Update cache
-      this.cacheSnapshot(storedSnapshot);
-      
       // Record metrics
       const duration = performance.now() - startTime;
-      await this.metricsCollector.recordLatency('snapshot.create', duration);
-      await this.metricsCollector.track('snapshot.created', 1, {
-        documentId,
-        version,
-        tenantId: tenantContext.tenantId
-      });
+      await this.metricsCollector.recordLatency('snapshot.store.create', duration);
       
-      return storedSnapshot;
+      // Transform to expected format
+      return {
+        id: snapshot.id,
+        documentId: snapshot.documentId,
+        tenantId: snapshot.tenantId,
+        version: snapshot.version,
+        data: data, // Return original data object (not serialized)
+        metadata: metadata,
+        timestamp: snapshot.timestamp
+      };
     } catch (error) {
-      // Record error metrics
-      await this.metricsCollector.increment('snapshot.create.error', 1);
+      await this.metricsCollector.increment('snapshot.store.create.failed', 1);
       throw error;
     }
   }
   
   /**
    * Gets the latest snapshot for a document
-   * 
-   * @param documentId Document identifier
-   * @returns Latest snapshot or null if none exists
    */
-  async getLatestSnapshot(documentId: string): Promise<Snapshot | null> {
+  async getLatestSnapshot(documentId: DocumentId, tenantId: string): Promise<Snapshot | null> {
     const startTime = performance.now();
-    const tenantContext = getTenantContext();
-    
-    if (!tenantContext?.tenantId) {
-      throw new Error('Cannot get snapshot: No tenant context available');
-    }
     
     try {
-      // Check cache first
-      const cachedSnapshot = this.getCachedSnapshot(documentId);
-      if (cachedSnapshot) {
-        // Record cache hit metric
-        await this.metricsCollector.increment('snapshot.cache.hit', 1);
-        return cachedSnapshot;
-      }
-      
-      // Query database for latest snapshot
+      // Find latest snapshot by version
       const snapshot = await this.prisma.snapshot.findFirst({
         where: {
           documentId,
-          tenantId: tenantContext.tenantId
+          tenantId
         },
         orderBy: {
           version: 'desc'
         }
       });
       
-      // Update cache if snapshot exists
-      if (snapshot) {
-        this.cacheSnapshot(snapshot);
+      if (!snapshot) {
+        return null;
       }
       
       // Record metrics
       const duration = performance.now() - startTime;
-      await this.metricsCollector.recordLatency('snapshot.get', duration);
-      await this.metricsCollector.track('snapshot.retrieved', 1, {
-        documentId,
-        found: Boolean(snapshot),
-        tenantId: tenantContext.tenantId
-      });
+      await this.metricsCollector.recordLatency('snapshot.store.get', duration);
       
-      return snapshot;
+      // Transform to expected format
+      return {
+        id: snapshot.id,
+        documentId: snapshot.documentId,
+        tenantId: snapshot.tenantId,
+        version: snapshot.version,
+        data: JSON.parse(snapshot.data as string),
+        metadata: JSON.parse(snapshot.metadata as string),
+        timestamp: snapshot.timestamp
+      };
     } catch (error) {
-      // Record error metrics
-      await this.metricsCollector.increment('snapshot.get.error', 1);
+      await this.metricsCollector.increment('snapshot.store.get.failed', 1);
       throw error;
     }
   }
   
   /**
-   * Gets a snapshot at or before a specific version
-   * 
-   * @param documentId Document identifier
-   * @param version Target version
-   * @returns Snapshot or null if none exists
+   * Gets a snapshot by version
    */
-  async getSnapshotAtVersion(documentId: string, version: number): Promise<Snapshot | null> {
-    const tenantContext = getTenantContext();
-    
-    if (!tenantContext?.tenantId) {
-      throw new Error('Cannot get snapshot: No tenant context available');
-    }
+  async getSnapshotByVersion(
+    documentId: DocumentId,
+    tenantId: string,
+    version: number
+  ): Promise<Snapshot | null> {
+    const startTime = performance.now();
     
     try {
-      // Query database for snapshot at or before version
+      // Find specific snapshot by version
       const snapshot = await this.prisma.snapshot.findFirst({
         where: {
           documentId,
-          tenantId: tenantContext.tenantId,
-          version: {
-            lte: version
-          }
-        },
-        orderBy: {
-          version: 'desc'
+          tenantId,
+          version
         }
       });
       
-      // Record metrics
-      await this.metricsCollector.track('snapshot.retrieved.byVersion', 1, {
-        documentId,
-        targetVersion: version,
-        foundVersion: snapshot?.version || 0,
-        tenantId: tenantContext.tenantId
-      });
+      if (!snapshot) {
+        return null;
+      }
       
-      return snapshot;
+      // Record metrics
+      const duration = performance.now() - startTime;
+      await this.metricsCollector.recordLatency('snapshot.store.getByVersion', duration);
+      
+      // Transform to expected format
+      return {
+        id: snapshot.id,
+        documentId: snapshot.documentId,
+        tenantId: snapshot.tenantId,
+        version: snapshot.version,
+        data: JSON.parse(snapshot.data as string),
+        metadata: JSON.parse(snapshot.metadata as string),
+        timestamp: snapshot.timestamp
+      };
     } catch (error) {
-      await this.metricsCollector.increment('snapshot.get.error', 1);
+      await this.metricsCollector.increment('snapshot.store.getByVersion.failed', 1);
       throw error;
     }
   }
@@ -230,7 +198,7 @@ export class SnapshotStore {
     
     try {
       // Get latest snapshot
-      const latestSnapshot = await this.getLatestSnapshot(documentId);
+      const latestSnapshot = await this.getLatestSnapshot(documentId, tenantContext.tenantId);
       
       // Get event count since last snapshot
       const lastSnapshotVersion = latestSnapshot?.version || 0;
@@ -259,7 +227,7 @@ export class SnapshotStore {
       
       // Check if time since last snapshot exceeds threshold
       if (latestSnapshot) {
-        const timeSinceSnapshot = Date.now() - latestSnapshot.timestamp;
+        const timeSinceSnapshot = Date.now() - new Date(latestSnapshot.timestamp).getTime();
         if (timeSinceSnapshot > SnapshotStore.DEFAULT_TIME_THRESHOLD_MS) {
           await this.metricsCollector.track('snapshot.decision', 1, {
             documentId,
