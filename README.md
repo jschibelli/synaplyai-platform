@@ -1,117 +1,154 @@
-Based on what I understand about your project from our discussion, I'll create a comprehensive README.md that provides an overview of the architectural approach, key features, technical stack, and implementation guidance for your multi-tenant collaborative platform.
+I've analyzed your project files and can provide an architectural overview for your README. The platform appears to be an enterprise-grade, multi-tenant AI content creation system with advanced collaboration features, usage tracking, and comprehensive tenant isolation.
 
-```markdown
-# SynaplyAI: Enterprise Multi-Tenant Collaborative AI Platform
+# SynaplyAI: Enterprise Multi-Tenant AI Content Platform
 
 ## Overview
 
-SynaplyAI is an enterprise-grade, multi-tenant AI content creation platform designed for secure collaboration, strong governance, and scalable performance. The platform empowers organizations to leverage AI for content generation while maintaining strict tenant isolation, comprehensive usage monitoring, and intuitive collaborative editing.
-
-![Architecture Overview](https://via.placeholder.com/800x400?text=Architecture+Overview)
+SynaplyAI is a scalable, multi-tenant AI content creation platform designed for enterprise environments, with robust tenant isolation, comprehensive usage tracking, and collaborative editing capabilities. The platform empowers organizations to leverage AI models while maintaining strict governance, compliance, and performance monitoring.
 
 ## Key Architectural Features
 
-### Secure Multi-Tenant Architecture
+### Tenant Isolation Architecture
 
-- **Complete Tenant Isolation**: AsyncLocalStorage-based context propagation with boundary enforcement
-- **Tenant-Aware Theme System**: CSS variable architecture with multi-tiered fallbacks
-- **Role-Based Access Control**: Granular permissions with tenant-specific overrides
-- **Compliance Framework**: Immutable audit logging with tenant context
+- **Complete Data Separation**: AsyncLocalStorage-based context propagation ensures tenant boundaries across all operations
+- **Automated Enforcement**: Prisma middleware for database-level tenant filtering
+- **Contextual Security**: Request-scoped tenant identifiers with access validation
 
-### Real-Time Collaboration
+### Usage Tracking System
 
-- **CRDT-Based Editing**: Conflict-free real-time document collaboration using Yjs
-- **Optimistic Updates**: Double buffer pattern for responsive editing experience
-- **Intelligent Conflict Resolution**: Tiered visualization with graduated disclosure
-- **Offline Support**: Command queueing with recovery strategies
+- **Token-Level Monitoring**: Precise tracking of AI model consumption
+- **Tiered Subscription Management**: Differentiated access and limits by subscription level
+- **Multi-Model Support**: Compatible with both OpenAI and Anthropic models
 
-### Performance-Optimized Design
+### Collaborative Editing Framework
 
-- **Virtualized Rendering**: Efficient display of large documents
-- **Document Partitioning**: Memory optimization through selective loading
-- **Command Processing Pipeline**: Multi-queue architecture with priority handling
-- **Differential Theme Updates**: Minimal DOM operations during theme switching
+- **Event Sourcing Architecture**: Immutable event history with snapshot optimization
+- **Command Pattern Implementation**: Type-safe command handling with validation
+- **Conflict Resolution**: Advanced detection and resolution of concurrent edits
+- **Real-time Synchronization**: Cursor tracking and document state management
+
+### Compliance & Governance Framework
+
+- **Immutable Audit Trail**: Partitioned, tamper-proof compliance logging
+- **Content Filtering**: Multi-stage pipeline with progressive filtering sophistication
+- **Circuit Breaker Pattern**: Tenant-aware resilience with adaptive thresholds
 
 ## Technical Stack
 
 - **Frontend**: Next.js, TypeScript, React
-- **State Management**: Zustand + Yjs
-- **Styling**: Tailwind CSS with CSS Variables
-- **Real-Time**: Socket.IO + Yjs
-- **Backend**: Node.js with Prisma ORM
-- **Database**: PostgreSQL with tenant isolation
-- **Caching**: Redis for metrics and distributed state
+- **Backend**: Node.js, Express
+- **Database**: PostgreSQL with tenant partitioning
+- **Real-time**: Socket.IO for collaborative features
+- **Caching**: Redis for metrics and circuit breaker state
+- **ORM**: Prisma with tenant middleware
 
-## Architecture Overview
-
-The platform follows a layered architecture with clear responsibility boundaries:
+## Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────┐
-│ Presentation Layer (UI Components)                  │
-└───────────────────────┬─────────────────────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────┐
-│ Application Layer (Hooks, Context, State Management)│
-└───────────────────────┬─────────────────────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────┐
-│ Domain Layer (Business Logic, Command Processing)   │
-└───────────────────────┬─────────────────────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────┐
-│ Infrastructure Layer (API, Event Sourcing, Storage) │
-└─────────────────────────────────────────────────────┘
+┌───────────────────┐     ┌───────────────────┐     ┌───────────────────┐
+│                   │     │                   │     │                   │
+│  Client Interface │────▶│  Command Registry │────▶│    Event Store    │
+│                   │     │                   │     │                   │
+└───────────────────┘     └───────────────────┘     └─────────┬─────────┘
+                                                              │
+                                                              ▼
+┌───────────────────┐     ┌───────────────────┐     ┌───────────────────┐
+│                   │     │                   │     │                   │
+│  Real-time Sync   │◀───▶│  Document State   │◀────│   Event Handlers  │
+│                   │     │                   │     │                   │
+└───────────────────┘     └───────────────────┘     └───────────────────┘
+        ▲                                                    ▲
+        │                                                    │
+        │                 ┌───────────────────┐             │
+        │                 │                   │             │
+        └────────────────│ Tenant Context    │─────────────┘
+                          │                   │
+                          └───────────────────┘
 ```
 
-### Tenant Isolation Pattern
+## Core Subsystems
 
-Tenant isolation is enforced through a combination of frontend context providers, middleware, and backend AsyncLocalStorage:
+### Tenant Isolation
+
+The platform enforces tenant isolation through several mechanisms:
 
 ```typescript
-// Frontend tenant context with boundary validation
-export const TenantProvider: React.FC = ({ children, tenantId }) => {
-  // Set up tenant context with boundary validation
-  useEffect(() => {
-    // Configure API interceptors, WebSocket connection, and error tracking
-    configureApiInterceptors(tenantId);
-    configureWebSocketConnection(tenantId);
-    configureErrorTracking(tenantId);
-  }, [tenantId]);
-
-  return (
-    <TenantContext.Provider value={{ tenantId }}>
-      <TenantErrorBoundary>
-        {children}
-      </TenantErrorBoundary>
-    </TenantContext.Provider>
-  );
-};
+// Database-level tenant filtering with Prisma middleware
+prisma.$use(async (params, next) => {
+  // Get current tenant ID from context
+  const tenantId = getCurrentTenantId();
+  
+  // Skip for non-CRUD operations
+  if (!['findMany', 'findUnique', 'findFirst', 'create', 'update', 'delete'].includes(params.action)) {
+    return next(params);
+  }
+  
+  // Apply tenant filter
+  if (params.action === 'findMany') {
+    params.args.where = {
+      ...params.args.where,
+      tenantId,
+    };
+  }
+  
+  // Handle other operations...
+  return next(params);
+});
 ```
 
 ### Event Sourcing & Command Pattern
 
-The platform uses a command pattern with event sourcing for document operations:
+The platform uses an event sourcing architecture with command pattern for document operations:
 
 ```typescript
-// Command processing architecture
-export class CommandProcessor {
-  async processCommand(command) {
-    // Multi-stage validation
-    const schemaValid = this.validateCommandSchema(command);
-    if (!schemaValid) return { success: false };
+// Command execution with transaction boundaries
+async executeCommand(command) {
+  return this.transactionManager.executeInTransaction(async (transaction) => {
+    // Generate events from command
+    const events = await this.commandHandler.handle(command);
     
-    const rulesValid = this.validateBusinessRules(command);
-    if (!rulesValid.valid) return { success: false };
-    
-    try {
-      // Command execution within transaction
-      return await this.executeCommand(command);
-    } catch (error) {
-      // Intelligent recovery based on command type
-      return this.handleCommandFailure(command, error);
+    // Store events in EventStore
+    for (const event of events) {
+      await this.eventStore.store(event, transaction);
     }
-  }
+    
+    // Return command result
+    return { success: true, events };
+  });
+}
+```
+
+### Usage Tracking
+
+The platform includes comprehensive usage tracking:
+
+```typescript
+// Track token usage with tenant isolation
+async trackTokenUsage(tenantId, modelId, requestTokens, responseTokens) {
+  // Record usage in Redis time buckets
+  const dayKey = `usage:${tenantId}:${modelId}:${formatDate(new Date())}`;
+  const monthKey = `usage:${tenantId}:${modelId}:${formatMonth(new Date())}`;
+  
+  // Use Redis pipeline for atomic operations
+  const pipeline = this.redisClient.pipeline();
+  pipeline.incrby(`${dayKey}:request`, requestTokens);
+  pipeline.incrby(`${dayKey}:response`, responseTokens);
+  pipeline.incrby(`${monthKey}:request`, requestTokens);
+  pipeline.incrby(`${monthKey}:response`, responseTokens);
+  
+  // Execute pipeline
+  await pipeline.exec();
+  
+  // Also store in database for permanence
+  await this.prisma.userUsage.create({
+    data: {
+      tenantId,
+      modelId,
+      requestTokens,
+      responseTokens,
+      date: new Date()
+    }
+  });
 }
 ```
 
@@ -119,22 +156,21 @@ export class CommandProcessor {
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js v18+
 - PostgreSQL 14+
 - Redis 6+
-- Yarn (recommended) or npm
 
-### Development Setup
+### Installation
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/synaplyai.git
+   git clone https://github.com/your-org/synaplyai.git
    cd synaplyai
    ```
 
 2. Install dependencies:
    ```bash
-   yarn install
+   npm install
    ```
 
 3. Set up environment variables:
@@ -145,129 +181,129 @@ export class CommandProcessor {
 
 4. Run database migrations:
    ```bash
-   yarn prisma migrate dev
+   npx prisma migrate dev
    ```
 
 5. Start the development server:
    ```bash
-   yarn dev
+   npm run dev
    ```
 
-6. Access the application at http://localhost:3000
+## Architecture Decision Records
 
-## Implementation Roadmap
+### Tenant Isolation Strategy
 
-The project implementation is divided into five key phases:
+**Decision**: Use AsyncLocalStorage-based context propagation with Prisma middleware
 
-1. **Foundation (Weeks 1-4)**: Tenant context, theme system, command processing
-2. **Collaboration (Weeks 5-8)**: Real-time synchronization, network resilience
-3. **Document Editing (Weeks 9-12)**: Editor implementation, state synchronization
-4. **Conflict Management (Weeks 13-16)**: Conflict detection, resolution interfaces
-5. **Enterprise Features (Weeks 17-20)**: Governance, compliance, optimization
+**Rationale**: This approach provides:
+- Automatic tenant filtering at the database level
+- Persistence of tenant context across async boundaries
+- Clean separation without code duplication
+- Built-in security through default denial when context is missing
+
+### Event Sourcing Implementation
+
+**Decision**: Implement event sourcing with adaptive snapshotting
+
+**Rationale**:
+- Complete audit trail of all document changes
+- Point-in-time reconstruction capabilities
+- Optimized performance through adaptive snapshots
+- Support for conflict detection and resolution
+
+### Circuit Breaker Pattern
+
+**Decision**: Use tenant-aware circuit breakers with Redis state storage
+
+**Rationale**:
+- Prevents cascade failures while maintaining tenant isolation
+- Shared state across distributed systems
+- Adaptive thresholds based on tenant-specific patterns
+- Self-healing through half-open state testing
 
 ## Development Guidelines
 
 ### Tenant Context Propagation
 
-Always ensure tenant context is properly propagated through your components:
+Always ensure tenant context is properly propagated:
 
 ```typescript
-// Using tenant context in components
-const MyComponent = () => {
-  const { tenantId } = useTenantContext();
+// Using tenant context in API routes
+export default async function handler(req, res) {
+  // Extract tenant ID from request
+  const tenantId = extractTenantId(req);
   
-  // Use tenant ID for data fetching, permissions, etc.
-  return <div>Current tenant: {tenantId}</div>;
-};
-```
-
-### State Management Patterns
-
-The platform uses tenant-aware Zustand stores for state management:
-
-```typescript
-// Creating tenant-scoped stores
-const useDocumentStore = createTenantStore((tenantId) => ({
-  documents: [],
-  isLoading: false,
-  loadDocuments: async () => {
-    // Tenant ID is automatically included in requests
-    const documents = await api.getDocuments();
-    set({ documents, isLoading: false });
-  }
-}));
-```
-
-### Command Processing
-
-Use the command processing system for all document operations:
-
-```typescript
-// Command execution
-const handleTextInsert = (position, text) => {
-  commandProcessor.processCommand({
-    type: 'INSERT_TEXT',
-    payload: {
-      documentId,
-      position,
-      text
-    }
+  // Run with tenant context
+  return tenantContextStorage.run({ tenantId }, async () => {
+    // All operations within this function have tenant context
+    const data = await prisma.documents.findMany();
+    return res.status(200).json(data);
   });
-};
+}
 ```
 
-## Performance Optimization
+### Command Validation
 
-The platform includes several performance optimization strategies:
+Implement proper validation for all commands:
 
-1. **Document Virtualization**: Only render visible portions of large documents
-2. **Command Batching**: Aggregate rapid commands to reduce network overhead
-3. **State Partitioning**: Separate tenant-specific, global, and local state
-4. **Differential Rendering**: Only update DOM for changed document sections
+```typescript
+// Command validation
+function validateCommand(command) {
+  // Schema validation
+  if (!command.documentId) {
+    return { valid: false, reason: 'Document ID is required' };
+  }
+  
+  // Business rule validation
+  if (command.type === 'DELETE_TEXT' && command.length <= 0) {
+    return { valid: false, reason: 'Delete length must be positive' };
+  }
+  
+  return { valid: true };
+}
+```
+
+## Performance Considerations
+
+- **Adaptive Snapshotting**: Creates snapshots based on document size and activity
+- **Redis-Based Metrics**: Time-bucketed metrics with automatic roll-ups
+- **Command Aggregation**: Batches similar commands to reduce network overhead
+- **Circuit Breaker Thresholds**: Adapts based on service reliability patterns
+
+## Security Best Practices
+
+- **Tenant ID Validation**: Always validate tenant ID matches authenticated user
+- **Command Authorization**: Verify permissions before execution
+- **Content Filtering**: Multi-stage pipeline to prevent policy violations
+- **Immutable Audit Logs**: Tamper-proof evidence of system activity
 
 ## Testing Strategy
 
-A comprehensive testing strategy ensures reliable operation:
-
-1. **Unit Tests**: Component and state management validation
-2. **Integration Tests**: Tenant isolation and state synchronization
-3. **E2E Tests**: Real-time collaboration and conflict resolution
-4. **Performance Tests**: Document loading and editing operation benchmarks
+- **Tenant Isolation Tests**: Verify data separation between tenants
+- **Event Replay Tests**: Confirm correct state reconstruction
+- **Conflict Resolution Tests**: Validate handling of concurrent edits
+- **Performance Tests**: Ensure system scales under load
 
 ## Deployment Architecture
 
-The platform supports a scalable deployment architecture:
+The platform supports flexible deployment options:
 
-1. **Frontend**: Static generation with incremental static regeneration
-2. **API Layer**: Serverless functions with tenant context propagation
-3. **WebSocket**: Dedicated servers for real-time communication
-4. **Database**: Tenant-isolated PostgreSQL with connection pooling
+- **Kubernetes**: Container orchestration with tenant-aware scaling
+- **Serverless**: Function-based deployment with context preservation
+- **Traditional**: VM-based deployment with service clustering
 
-## Contributing
+## Roadmap
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Commit your changes: `git commit -m 'Add new feature'`
-4. Push to the branch: `git push origin feature/my-feature`
-5. Submit a pull request
+See [Project Plan](./docs/project-plan.md) for detailed development milestones.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
 
-## Acknowledgments
+## Contributors
 
-- OpenAI for GPT-4 API
-- Anthropic for Claude API
-- Yjs for collaborative editing capabilities
-- Redis Labs for Redis implementation guidance
-```
+- John Schibelli (Project Lead)
 
-This README provides a comprehensive overview of your platform's architecture, key features, and implementation approach. It offers code examples for critical patterns like tenant isolation and command processing, while explaining the architectural decisions that drive the design.
+---
 
-The document is structured to serve multiple audiences:
-- **New developers** can quickly understand the architecture and setup
-- **Contributors** get clear guidance on maintaining tenant isolation
-- **Project stakeholders** can see the overall vision and implementation roadmap
-
-The performance optimization and testing sections highlight your focus on creating a robust, scalable platform that meets enterprise requirements for multi-tenant isolation and collaborative editing.
+This README provides a high-level overview of the architecture and implementation strategy. For detailed documentation, please refer to the specific subsystem documentation in the `docs/` directory.
