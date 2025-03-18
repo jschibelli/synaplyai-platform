@@ -6,6 +6,38 @@ All notable changes to this project will be documented in this file.
 - Event sourcing architecture for document editing
 - Command/Query separation for editor operations
 - Snapshot mechanism for performance optimization
+- Custom AI command implementation
+- Integration of collaborative editing with AI assistance
+
+## [0.6.0] - 2025-04-12
+
+### Added
+- Complete event sourcing architecture for document editing
+- Command/Query separation for editor operations
+- Snapshot mechanism for performance optimization
+  - Implemented `SnapshotStore` with tenant isolation and caching
+  - Created `SnapshotManager` with adaptive threshold management
+  - Added database schema for efficient snapshot storage
+- Robust conflict resolution framework
+  - Implemented `ConflictDetector` for identifying various conflict types
+  - Created `ConflictResolver` with multiple resolution strategies (MERGE, LOCAL_FIRST, REMOTE_FIRST, MANUAL)
+  - Added operational transform support for merging concurrent edits
+  - Implemented vector clock mechanism for causality tracking
+- Comprehensive metrics collection for conflict detection and resolution
+- Real-time collaborative editing with proper conflict handling
+
+### Changed
+- Extended database schema with Snapshot table
+- Improved event handling with vector clock synchronization
+- Enhanced tenant isolation in collaborative editing context
+- Updated metrics collection to track conflict resolution efficiency
+- Optimized document reconstruction with snapshot-based approach
+
+### Fixed
+- Concurrent editing issues with proper conflict detection
+- Event ordering problems using vector clocks
+- Performance bottlenecks in document reconstruction
+- Tenant isolation edge cases in collaborative scenarios
 
 ## Week 5-6: Enhanced Governance & Compliance Framework
 

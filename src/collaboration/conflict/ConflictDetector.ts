@@ -1,7 +1,40 @@
-import { Operation } from './OperationalTransform';
+import { DocumentEvent } from '../events/types';
 import { VectorClock } from './VectorClock';
 import { ComplianceLogger } from '../../compliance/logger';
 import { MetricsCollector } from '../../metrics/collector';
+
+/**
+ * Enum representing the relationship between two operations
+ */
+export enum OperationRelationship {
+  BEFORE = 'before',     // First operation happened before second
+  AFTER = 'after',       // First operation happened after second
+  CONCURRENT = 'concurrent', // Operations happened concurrently (potential conflict)
+  SAME = 'same'          // Same operation
+}
+
+/**
+ * Enum representing the type of conflict detected
+ */
+export enum ConflictType {
+  TEXT_EDIT = 'text_edit',       // Concurrent modifications to overlapping text
+  FORMAT = 'format',             // Conflicting formatting changes
+  DELETE_MODIFIED = 'delete_modified', // One user deletes text another modified
+  STRUCTURAL = 'structural',     // Conflicting structural changes
+  MOVE_MODIFIED = 'move_modified', // One user modifies content another moves
+  NONE = 'none'                  // No conflict detected
+}
+
+/**
+ * Interface representing a detected conflict
+ */
+export interface Conflict {
+  type: ConflictType;
+  localEvent: DocumentEvent;
+  remoteEvent: DocumentEvent;
+  severity: 'low' | 'medium' | 'high';
+  description: string;
+}
 
 /**
  * Represents an operation with its associated vector clock for conflict detection
@@ -12,29 +45,6 @@ export interface VersionedOperation {
   clientId: string;
   timestamp: number;
   documentId?: string;
-}
-
-/**
- * Types of conflicts that can occur in collaborative editing
- */
-export type ConflictType = 'TEXT_EDIT' | 'FORMAT' | 'DELETE_MODIFIED' | 'STRUCTURAL' | 'MOVE_MODIFIED';
-
-/**
- * Represents the relationship between two operations
- */
-export type OperationRelationship = 'before' | 'after' | 'concurrent' | 'same';
-
-/**
- * Result of conflict detection
- */
-export interface ConflictDetectionResult {
-  hasConflict: boolean;
-  relationship: OperationRelationship;
-  conflictType?: ConflictType;
-  confidenceScore?: number;
-  region1?: { start: number; end: number };
-  region2?: { start: number; end: number };
-  overlapPercentage?: number;
 }
 
 /**
@@ -53,17 +63,11 @@ export interface ConflictDetectorConfig {
 }
 
 /**
- * Detects conflicts between concurrent operations in collaborative editing.
+ * Responsible for detecting conflicts between concurrent operations
  */
 export class ConflictDetector {
   private config: ConflictDetectorConfig;
   
-  /**
-   * Creates a new ConflictDetector
-   * 
-   * @param metricsCollector Metrics collector for tracking performance
-   * @param config Optional configuration
-   */
   constructor(
     private metricsCollector: MetricsCollector,
     config?: Partial<ConflictDetectorConfig>
@@ -74,298 +78,342 @@ export class ConflictDetector {
       ...config
     };
   }
-  
+
   /**
-   * Detect if two operations conflict with each other
-   * 
-   * @param op1 First operation
-   * @param op2 Second operation
-   * @returns Result of conflict detection
+   * Detects potential conflicts between two events using vector clocks
    */
-  async detectConflict(
-    op1: VersionedOperation,
-    op2: VersionedOperation
-  ): Promise<ConflictDetectionResult> {
+  detectConflict(localEvent: DocumentEvent, remoteEvent: DocumentEvent): Conflict | null {
     const startTime = performance.now();
     
     try {
-      // Determine the relationship between operations using vector clocks
-      const relationship = this.determineRelationship(op1, op2);
-      
-      // If operations are causally related (one happened before the other),
-      // there's no conflict by definition
-      if (relationship === 'before' || relationship === 'after') {
-        return {
-          hasConflict: false,
-          relationship
-        };
-      }
-      
-      // If operations are from the same client, we assume they're intended to be sequential
-      if (op1.clientId === op2.clientId) {
-        // For same client, use vector clocks to determine ordering
-        if (op1.vectorClock.getClock(op1.clientId) < op2.vectorClock.getClock(op1.clientId)) {
-          return {
-            hasConflict: false,
-            relationship: 'before'
-          };
-        } else if (op1.vectorClock.getClock(op1.clientId) > op2.vectorClock.getClock(op1.clientId)) {
-          return {
-            hasConflict: false,
-            relationship: 'after'
-          };
-        }
-        
-        // If vector clocks are equal for the same client, it's a duplicate
-        return {
-          hasConflict: false,
-          relationship: 'same'
-        };
-      }
-      
-      // Get operation regions (the parts of the document they affect)
-      const region1 = this.getOperationRegion(op1.operation);
-      const region2 = this.getOperationRegion(op2.operation);
-      
-      // Calculate overlap percentage
-      const overlapPercentage = this.calculateOverlapPercentage(region1, region2);
-      
-      // If regions don't overlap at all or overlap is below threshold, no conflict
-      if (overlapPercentage < this.config.minOverlapPercentage) {
-        return {
-          hasConflict: false,
-          relationship: 'concurrent',
-          region1,
-          region2,
-          overlapPercentage
-        };
-      }
-      
-      // Determine conflict type based on operation types
-      const conflictType = this.determineConflictType(op1, op2);
-      
-      // If no actual conflict (like format operations affecting different attributes),
-      // return no conflict despite overlapping regions
-      if (!conflictType) {
-        return {
-          hasConflict: false,
-          relationship: 'concurrent',
-          region1,
-          region2,
-          overlapPercentage
-        };
-      }
-      
-      // Calculate confidence score based on overlap and operation types
-      const confidenceScore = this.calculateConfidenceScore(
-        overlapPercentage,
-        op1.operation,
-        op2.operation
+      // Compare vector clocks to determine relationship
+      const relationship = this.compareVectorClocks(
+        localEvent.vectorClock || {},
+        remoteEvent.vectorClock || {}
       );
       
-      // Log conflict to compliance logger if enabled
-      if (this.config.logToCompliance && conflictType) {
-        await this.logConflictToCompliance(op1, op2, conflictType, overlapPercentage);
+      // If not concurrent, no conflict
+      if (relationship !== OperationRelationship.CONCURRENT) {
+        return null;
       }
       
-      // Return conflict details
-      return {
-        hasConflict: true,
-        relationship: 'concurrent',
-        conflictType,
-        confidenceScore,
-        region1,
-        region2,
-        overlapPercentage
+      // Detect conflict type based on event types and affected ranges
+      const conflictType = this.identifyConflictType(localEvent, remoteEvent);
+      if (conflictType === ConflictType.NONE) {
+        return null;
+      }
+      
+      // Create conflict object with appropriate severity and description
+      const conflict: Conflict = {
+        type: conflictType,
+        localEvent,
+        remoteEvent,
+        severity: this.determineSeverity(conflictType, localEvent, remoteEvent),
+        description: this.generateDescription(conflictType, localEvent, remoteEvent)
       };
+      
+      // Record metrics
+      this.metricsCollector.increment('conflict.detected', 1);
+      this.metricsCollector.track('conflict.type', 1, { type: conflictType });
+      
+      return conflict;
     } finally {
-      // Record metrics about conflict detection
       const duration = performance.now() - startTime;
-      await this.metricsCollector.recordLatency('conflict.detection', duration);
+      this.metricsCollector.recordLatency('conflict.detection.time', duration);
     }
   }
   
   /**
-   * Determine the relationship between two operations using vector clocks
-   * @private
+   * Compares two vector clocks to determine their relationship
    */
-  private determineRelationship(
-    op1: VersionedOperation,
-    op2: VersionedOperation
-  ): OperationRelationship {
-    const clock1 = op1.vectorClock;
-    const clock2 = op2.vectorClock;
-    
-    if (clock1.happenedBefore(clock2)) {
-      return 'before';
-    } else if (clock2.happenedBefore(clock1)) {
-      return 'after';
-    } else if (clock1.equals(clock2)) {
-      return 'same';
-    } else {
-      return 'concurrent';
+  private compareVectorClocks(a: Record<string, number>, b: Record<string, number>): OperationRelationship {
+    // If exactly the same vector clocks, they're the same operation
+    if (JSON.stringify(a) === JSON.stringify(b)) {
+      return OperationRelationship.SAME;
     }
+    
+    let aThenB = true; // Is a fully causally before b?
+    let bThenA = true; // Is b fully causally before a?
+    
+    // Check if a has timestamps that are all less than or equal to b
+    for (const nodeId in a) {
+      if (!(nodeId in b) && a[nodeId] > 0) {
+        bThenA = false;
+        break;
+      }
+      
+      if (nodeId in b && a[nodeId] > b[nodeId]) {
+        bThenA = false;
+        break;
+      }
+    }
+    
+    // Check if b has timestamps that are all less than or equal to a
+    for (const nodeId in b) {
+      if (!(nodeId in a) && b[nodeId] > 0) {
+        aThenB = false;
+        break;
+      }
+      
+      if (nodeId in a && b[nodeId] > a[nodeId]) {
+        aThenB = false;
+        break;
+      }
+    }
+    
+    if (aThenB && !bThenA) return OperationRelationship.BEFORE;
+    if (!aThenB && bThenA) return OperationRelationship.AFTER;
+    return OperationRelationship.CONCURRENT;
   }
   
   /**
-   * Determine the type of conflict between two operations
-   * @private
+   * Identifies the type of conflict based on event types and content
    */
-  private determineConflictType(
-    op1: VersionedOperation,
-    op2: VersionedOperation
-  ): ConflictType | undefined {
-    const type1 = op1.operation.type;
-    const type2 = op2.operation.type;
-    
-    // Text edit conflict: concurrent inserts or deletes at overlapping positions
-    if ((type1 === 'insert' || type1 === 'delete') && 
-        (type2 === 'insert' || type2 === 'delete')) {
-      return 'TEXT_EDIT';
+  private identifyConflictType(localEvent: DocumentEvent, remoteEvent: DocumentEvent): ConflictType {
+    // Text editing conflicts (insert/delete overlap)
+    if (this.isTextEditingConflict(localEvent, remoteEvent)) {
+      return ConflictType.TEXT_EDIT;
     }
     
-    // Format conflict: concurrent format changes to the same region
-    if (type1 === 'format' && type2 === 'format') {
-      // Check if the same attributes are being modified
-      const attributes1 = (op1.operation as any).attributes || {};
-      const attributes2 = (op2.operation as any).attributes || {};
-      
-      // Find attributes that are modified in both operations
-      const commonAttributes = Object.keys(attributes1)
-        .filter(key => key in attributes2);
-      
-      // Only consider it a conflict if changing the same attributes
-      if (commonAttributes.length > 0) {
-        return 'FORMAT';
-      }
-      
-      // Different attributes being modified, not a conflict
-      return undefined;
+    // Format conflicts (same range, different formats)
+    if (this.isFormatConflict(localEvent, remoteEvent)) {
+      return ConflictType.FORMAT;
     }
     
-    // Delete-modified conflict: one operation deletes content that another modifies
-    if ((type1 === 'delete' && (type2 === 'insert' || type2 === 'format')) ||
-        (type2 === 'delete' && (type1 === 'insert' || type1 === 'format'))) {
-      return 'DELETE_MODIFIED';
+    // One user deletes text another modified
+    if (this.isDeleteModifiedConflict(localEvent, remoteEvent)) {
+      return ConflictType.DELETE_MODIFIED;
     }
     
-    // No recognized conflict pattern
-    return undefined;
+    // Structural conflicts (headings, lists, etc.)
+    if (this.isStructuralConflict(localEvent, remoteEvent)) {
+      return ConflictType.STRUCTURAL;
+    }
+    
+    // Move conflicts (one user moves content another edits)
+    if (this.isMoveModifiedConflict(localEvent, remoteEvent)) {
+      return ConflictType.MOVE_MODIFIED;
+    }
+    
+    return ConflictType.NONE;
   }
   
   /**
-   * Get the region affected by an operation
-   * @private
+   * Determines if two events represent a text editing conflict
    */
-  private getOperationRegion(operation: Operation): { start: number; end: number } {
-    switch (operation.type) {
-      case 'insert': {
-        const position = operation.position;
-        const length = operation.content.length;
-        return { start: position, end: position + length };
+  private isTextEditingConflict(eventA: DocumentEvent, eventB: DocumentEvent): boolean {
+    // Check if both events are text edits
+    if (!this.isTextEvent(eventA) || !this.isTextEvent(eventB)) {
+      return false;
+    }
+    
+    // Check for range overlap
+    return this.doRangesOverlap(
+      eventA.startPosition,
+      eventA.endPosition || eventA.startPosition + (eventA.text?.length || 0),
+      eventB.startPosition,
+      eventB.endPosition || eventB.startPosition + (eventB.text?.length || 0)
+    );
+  }
+  
+  /**
+   * Determines if two events represent a formatting conflict
+   */
+  private isFormatConflict(eventA: DocumentEvent, eventB: DocumentEvent): boolean {
+    // Check if both events are format events
+    if (!this.isFormatEvent(eventA) || !this.isFormatEvent(eventB)) {
+      return false;
+    }
+    
+    // Check for range overlap
+    if (!this.doRangesOverlap(
+      eventA.startPosition,
+      eventA.endPosition,
+      eventB.startPosition,
+      eventB.endPosition
+    )) {
+      return false;
+    }
+    
+    // Check if they're changing different attributes (which isn't a conflict)
+    if (this.areDistinctFormatAttributes(eventA.attributes || {}, eventB.attributes || {})) {
+      return false;
+    }
+    
+    return true;
+  }
+  
+  /**
+   * Determines if one event deletes text that the other modified
+   */
+  private isDeleteModifiedConflict(eventA: DocumentEvent, eventB: DocumentEvent): boolean {
+    // Check if one is delete and one is edit
+    const aIsDelete = this.isDeleteEvent(eventA);
+    const bIsDelete = this.isDeleteEvent(eventB);
+    
+    if (!aIsDelete && !bIsDelete) return false; // Neither is a delete
+    if (aIsDelete && bIsDelete) return false;   // Both are deletes (handled as text edit)
+    
+    // One is delete, one is edit
+    const deleteEvent = aIsDelete ? eventA : eventB;
+    const editEvent = aIsDelete ? eventB : eventA;
+    
+    // Check if edit affects text within delete range
+    return this.doRangesOverlap(
+      deleteEvent.startPosition,
+      deleteEvent.endPosition,
+      editEvent.startPosition,
+      editEvent.endPosition || editEvent.startPosition + (editEvent.text?.length || 0)
+    );
+  }
+  
+  /**
+   * Determines if two events represent a structural conflict
+   */
+  private isStructuralConflict(eventA: DocumentEvent, eventB: DocumentEvent): boolean {
+    // Check if both events are structure-related
+    if (!this.isStructuralEvent(eventA) || !this.isStructuralEvent(eventB)) {
+      return false;
+    }
+    
+    // Check for range overlap or adjacency
+    return this.doRangesOverlapOrAdjacent(
+      eventA.startPosition,
+      eventA.endPosition,
+      eventB.startPosition,
+      eventB.endPosition
+    );
+  }
+  
+  /**
+   * Determines if one event moves content that the other modifies
+   */
+  private isMoveModifiedConflict(eventA: DocumentEvent, eventB: DocumentEvent): boolean {
+    // Check if one is move and one is edit
+    const aIsMove = this.isMoveEvent(eventA);
+    const bIsMove = this.isMoveEvent(eventB);
+    
+    if (!aIsMove && !bIsMove) return false; // Neither is a move
+    if (aIsMove && bIsMove) return false;   // Both are moves (would be structural)
+    
+    // One is move, one is edit
+    const moveEvent = aIsMove ? eventA : eventB;
+    const editEvent = aIsMove ? eventB : eventA;
+    
+    // Check if edit affects text within moved range
+    return this.doRangesOverlap(
+      moveEvent.startPosition,
+      moveEvent.endPosition,
+      editEvent.startPosition,
+      editEvent.endPosition || editEvent.startPosition + (editEvent.text?.length || 0)
+    );
+  }
+  
+  /**
+   * Helper method to determine if ranges overlap
+   */
+  private doRangesOverlap(startA: number, endA: number, startB: number, endB: number): boolean {
+    return Math.max(startA, startB) < Math.min(endA, endB);
+  }
+  
+  /**
+   * Helper method to determine if ranges overlap or are adjacent
+   */
+  private doRangesOverlapOrAdjacent(startA: number, endA: number, startB: number, endB: number): boolean {
+    // Adjacent if end of one is start of other
+    const adjacent = endA === startB || endB === startA;
+    return this.doRangesOverlap(startA, endA, startB, endB) || adjacent;
+  }
+  
+  /**
+   * Helper to check if format attributes are completely distinct (no overlap)
+   */
+  private areDistinctFormatAttributes(a: Record<string, any>, b: Record<string, any>): boolean {
+    for (const key in a) {
+      if (key in b) {
+        return false; // Found a common attribute
       }
-      case 'delete': {
-        const position = operation.position;
-        const length = operation.length;
-        return { start: position, end: position + length };
-      }
-      case 'format': {
-        const position = (operation as any).position;
-        const length = (operation as any).length;
-        return { start: position, end: position + length };
-      }
+    }
+    return true;
+  }
+  
+  /**
+   * Determines if an event is a text editing event
+   */
+  private isTextEvent(event: DocumentEvent): boolean {
+    return ['TEXT_INSERTED', 'TEXT_DELETED', 'TEXT_REPLACED'].includes(event.type);
+  }
+  
+  /**
+   * Determines if an event is a format event
+   */
+  private isFormatEvent(event: DocumentEvent): boolean {
+    return ['FORMAT_APPLIED', 'FORMAT_REMOVED'].includes(event.type);
+  }
+  
+  /**
+   * Determines if an event is a delete event
+   */
+  private isDeleteEvent(event: DocumentEvent): boolean {
+    return event.type === 'TEXT_DELETED';
+  }
+  
+  /**
+   * Determines if an event is a structural event
+   */
+  private isStructuralEvent(event: DocumentEvent): boolean {
+    return ['LIST_CREATED', 'LIST_REMOVED', 'HEADING_CHANGED', 'BLOCK_CONVERTED'].includes(event.type);
+  }
+  
+  /**
+   * Determines if an event is a move event
+   */
+  private isMoveEvent(event: DocumentEvent): boolean {
+    return event.type === 'BLOCK_MOVED';
+  }
+  
+  /**
+   * Determines the severity of a conflict
+   */
+  private determineSeverity(type: ConflictType, local: DocumentEvent, remote: DocumentEvent): 'low' | 'medium' | 'high' {
+    switch (type) {
+      case ConflictType.DELETE_MODIFIED:
+        return 'high';   // Someone's edits could be lost
+      case ConflictType.TEXT_EDIT:
+        // Judge by size of overlap
+        const localSize = (local.endPosition || 0) - (local.startPosition || 0);
+        const remoteSize = (remote.endPosition || 0) - (remote.startPosition || 0);
+        return Math.max(localSize, remoteSize) > 10 ? 'high' : 'medium';
+      case ConflictType.FORMAT:
+        return 'low';    // Format conflicts are usually minor
+      case ConflictType.STRUCTURAL:
+        return 'medium'; // Structure changes can be disruptive
+      case ConflictType.MOVE_MODIFIED:
+        return 'medium'; // Someone's edits may be relocated
       default:
-        return { start: 0, end: 0 };
+        return 'low';
     }
   }
   
   /**
-   * Calculate the percentage of overlap between two regions
-   * @private
+   * Generates a human-readable description of the conflict
    */
-  private calculateOverlapPercentage(
-    region1: { start: number; end: number },
-    region2: { start: number; end: number }
-  ): number {
-    // No overlap
-    if (region1.end <= region2.start || region2.end <= region1.start) {
-      return 0;
+  private generateDescription(type: ConflictType, local: DocumentEvent, remote: DocumentEvent): string {
+    switch (type) {
+      case ConflictType.TEXT_EDIT:
+        return `Concurrent text edits at positions ${local.startPosition}-${local.endPosition} and ${remote.startPosition}-${remote.endPosition}`;
+      case ConflictType.FORMAT:
+        return `Conflicting format changes at positions ${local.startPosition}-${local.endPosition}`;
+      case ConflictType.DELETE_MODIFIED:
+        const deleteEvent = this.isDeleteEvent(local) ? local : remote;
+        return `Text deleted at positions ${deleteEvent.startPosition}-${deleteEvent.endPosition} that was also modified`;
+      case ConflictType.STRUCTURAL:
+        return `Conflicting structural changes at positions ${local.startPosition}-${local.endPosition} and ${remote.startPosition}-${remote.endPosition}`;
+      case ConflictType.MOVE_MODIFIED:
+        const moveEvent = this.isMoveEvent(local) ? local : remote;
+        return `Content moved from positions ${moveEvent.startPosition}-${moveEvent.endPosition} that was also modified`;
+      default:
+        return 'Unknown conflict type';
     }
-    
-    // Calculate overlap
-    const overlapStart = Math.max(region1.start, region2.start);
-    const overlapEnd = Math.min(region1.end, region2.end);
-    const overlapLength = overlapEnd - overlapStart;
-    
-    // Calculate sizes
-    const size1 = region1.end - region1.start;
-    const size2 = region2.end - region2.start;
-    
-    // Prevent division by zero
-    if (size1 === 0 || size2 === 0) {
-      return 0;
-    }
-    
-    // Return percentage of overlap relative to the smaller region
-    const smallerSize = Math.min(size1, size2);
-    return (overlapLength / smallerSize) * 100;
-  }
-  
-  /**
-   * Calculate confidence score for a detected conflict
-   * @private
-   */
-  private calculateConfidenceScore(
-    overlapPercentage: number,
-    op1: Operation,
-    op2: Operation
-  ): number {
-    // Start with overlap percentage as base confidence
-    let confidence = overlapPercentage / 100;
-    
-    // Adjust based on operation types
-    if (op1.type === 'insert' && op2.type === 'insert') {
-      // Inserting at exactly the same position is a strong conflict indicator
-      if ((op1 as any).position === (op2 as any).position) {
-        confidence = Math.max(confidence, 0.95);
-      }
-    } else if (op1.type === 'delete' && op2.type === 'delete') {
-      // Deleting exactly the same content is a strong conflict indicator
-      if ((op1 as any).position === (op2 as any).position && 
-          (op1 as any).length === (op2 as any).length) {
-        confidence = Math.max(confidence, 0.95);
-      }
-    } else if (op1.type === 'format' && op2.type === 'format') {
-      // Format conflicts can be more subtle, adjust confidence based on attributes
-      confidence = Math.min(confidence + 0.1, 0.9);
-    }
-    
-    return confidence;
-  }
-  
-  /**
-   * Log conflict details to compliance log
-   * @private
-   */
-  private async logConflictToCompliance(
-    op1: VersionedOperation,
-    op2: VersionedOperation,
-    conflictType: ConflictType,
-    overlapPercentage: number
-  ): Promise<void> {
-    await ComplianceLogger.log({
-      eventType: 'conflict.detected',
-      resourceId: op1.documentId || 'unknown',
-      description: `Editing conflict detected: ${conflictType}`,
-      metadata: {
-        conflictType,
-        client1: op1.clientId,
-        client2: op2.clientId,
-        operation1Type: op1.operation.type,
-        operation2Type: op2.operation.type,
-        overlapPercentage: overlapPercentage.toFixed(2),
-        timestamp: new Date().toISOString()
-      }
-    });
   }
 }

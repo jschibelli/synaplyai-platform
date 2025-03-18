@@ -105,6 +105,7 @@ model ComplianceLog {
   eventType   String
   resourceId  String?
   userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
   description String
   metadata    Json?
   createdAt   DateTime @default(now())
@@ -115,4 +116,21 @@ model ComplianceLog {
   @@index([resourceId])
   @@index([userId])
   @@index([createdAt])
+}
+
+// Add this to your existing schema.prisma file
+
+model Snapshot {
+  id         String   @id @default(uuid())
+  documentId String
+  tenantId   String
+  version    Int
+  data       String   @db.Text
+  metadata   String   @db.Text
+  timestamp  DateTime @default(now())
+  createdBy  String?
+
+  @@index([documentId, tenantId])
+  @@index([documentId, version])
+  @@unique([documentId, tenantId, version])
 }

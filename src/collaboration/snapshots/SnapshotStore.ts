@@ -25,13 +25,8 @@ export interface Snapshot {
   createdBy?: string;
 }
 
-export interface SnapshotOptions {
-  client?: any; // Transaction client
-  metadata?: Record<string, any>;
-}
-
 /**
- * Store for document snapshots
+ * Store for document snapshots with tenant isolation
  */
 export class SnapshotStore {
   // Default thresholds for snapshot creation
@@ -40,14 +35,8 @@ export class SnapshotStore {
   private static CACHE_TTL_MS = 1000 * 60 * 5; // 5 minutes
   
   // In-memory cache for snapshots
-  private snapshotCache = new Map<string, { snapshot: Snapshot; expires: number }>();
+  private snapshotCache = new Map<string, { snapshot: Snapshot; expiry: number }>();
   
-  /**
-   * Creates a new SnapshotStore
-   * 
-   * @param prisma Prisma client instance
-   * @param metricsCollector Metrics collector for performance tracking
-   */
   constructor(
     private prisma: PrismaClient,
     private metricsCollector: MetricsCollector
@@ -65,32 +54,44 @@ export class SnapshotStore {
     const startTime = performance.now();
     
     try {
+      // Get current tenant context
+      const tenantContext = getTenantContext();
+      
       // Create snapshot in database
       const snapshot = await this.prisma.snapshot.create({
         data: {
+          id: uuidv4(),
           documentId,
           tenantId,
           version: metadata.version,
           data: JSON.stringify(data), // Serialize document data
           metadata: JSON.stringify(metadata),
-          timestamp: new Date(metadata.timestamp).toISOString()
+          timestamp: new Date(metadata.timestamp).toISOString(),
+          createdBy: tenantContext?.userId || 'system'
         }
       });
       
       // Record metrics
       const duration = performance.now() - startTime;
       await this.metricsCollector.recordLatency('snapshot.store.create', duration);
+      await this.metricsCollector.recordValue('snapshot.size', JSON.stringify(data).length);
       
-      // Transform to expected format
-      return {
+      // Create snapshot object
+      const result: Snapshot = {
         id: snapshot.id,
         documentId: snapshot.documentId,
         tenantId: snapshot.tenantId,
         version: snapshot.version,
-        data: data, // Return original data object (not serialized)
-        metadata: metadata,
-        timestamp: snapshot.timestamp
+        data, // Return original data object (not serialized)
+        metadata,
+        timestamp: snapshot.timestamp,
+        createdBy: snapshot.createdBy
       };
+      
+      // Update cache
+      this.updateCache(result);
+      
+      return result;
     } catch (error) {
       await this.metricsCollector.increment('snapshot.store.create.failed', 1);
       throw error;
@@ -104,6 +105,15 @@ export class SnapshotStore {
     const startTime = performance.now();
     
     try {
+      // Check cache first
+      const cacheKey = this.getCacheKey(documentId, tenantId, 'latest');
+      const cached = this.snapshotCache.get(cacheKey);
+      
+      if (cached && cached.expiry > Date.now()) {
+        await this.metricsCollector.increment('snapshot.cache.hit', 1);
+        return cached.snapshot;
+      }
+      
       // Find latest snapshot by version
       const snapshot = await this.prisma.snapshot.findFirst({
         where: {
@@ -122,17 +132,24 @@ export class SnapshotStore {
       // Record metrics
       const duration = performance.now() - startTime;
       await this.metricsCollector.recordLatency('snapshot.store.get', duration);
+      await this.metricsCollector.increment('snapshot.cache.miss', 1);
       
-      // Transform to expected format
-      return {
+      // Create snapshot object
+      const result: Snapshot = {
         id: snapshot.id,
         documentId: snapshot.documentId,
         tenantId: snapshot.tenantId,
         version: snapshot.version,
         data: JSON.parse(snapshot.data as string),
         metadata: JSON.parse(snapshot.metadata as string),
-        timestamp: snapshot.timestamp
+        timestamp: snapshot.timestamp,
+        createdBy: snapshot.createdBy
       };
+      
+      // Update cache
+      this.updateCache(result, 'latest');
+      
+      return result;
     } catch (error) {
       await this.metricsCollector.increment('snapshot.store.get.failed', 1);
       throw error;
@@ -150,6 +167,15 @@ export class SnapshotStore {
     const startTime = performance.now();
     
     try {
+      // Check cache first
+      const cacheKey = this.getCacheKey(documentId, tenantId, version.toString());
+      const cached = this.snapshotCache.get(cacheKey);
+      
+      if (cached && cached.expiry > Date.now()) {
+        await this.metricsCollector.increment('snapshot.cache.hit', 1);
+        return cached.snapshot;
+      }
+      
       // Find specific snapshot by version
       const snapshot = await this.prisma.snapshot.findFirst({
         where: {
@@ -166,17 +192,24 @@ export class SnapshotStore {
       // Record metrics
       const duration = performance.now() - startTime;
       await this.metricsCollector.recordLatency('snapshot.store.getByVersion', duration);
+      await this.metricsCollector.increment('snapshot.cache.miss', 1);
       
-      // Transform to expected format
-      return {
+      // Create snapshot object
+      const result: Snapshot = {
         id: snapshot.id,
         documentId: snapshot.documentId,
         tenantId: snapshot.tenantId,
         version: snapshot.version,
         data: JSON.parse(snapshot.data as string),
         metadata: JSON.parse(snapshot.metadata as string),
-        timestamp: snapshot.timestamp
+        timestamp: snapshot.timestamp,
+        createdBy: snapshot.createdBy
       };
+      
+      // Update cache
+      this.updateCache(result);
+      
+      return result;
     } catch (error) {
       await this.metricsCollector.increment('snapshot.store.getByVersion.failed', 1);
       throw error;
@@ -369,5 +402,130 @@ export class SnapshotStore {
         this.snapshotCache.delete(key);
       }
     }
+  }
+  
+  /**
+   * Delete snapshots older than the specified version, keeping N versions
+   */
+  async pruneOldSnapshots(
+    documentId: DocumentId,
+    tenantId: string,
+    keepLatestVersions: number = 5
+  ): Promise<number> {
+    try {
+      // Find the latest N snapshots to keep
+      const latestSnapshots = await this.prisma.snapshot.findMany({
+        where: { documentId, tenantId },
+        orderBy: { version: 'desc' },
+        take: keepLatestVersions,
+        select: { version: true }
+      });
+      
+      if (latestSnapshots.length === 0) {
+        return 0;
+      }
+      
+      // Get the lowest version to keep
+      const minVersionToKeep = latestSnapshots[latestSnapshots.length - 1].version;
+      
+      // Delete older snapshots
+      const result = await this.prisma.snapshot.deleteMany({
+        where: {
+          documentId,
+          tenantId,
+          version: {
+            lt: minVersionToKeep
+          }
+        }
+      });
+      
+      // Clear cache entries for deleted snapshots
+      this.clearCacheByPredicate(entry => 
+        entry.snapshot.documentId === documentId && 
+        entry.snapshot.tenantId === tenantId && 
+        entry.snapshot.version < minVersionToKeep
+      );
+      
+      await this.metricsCollector.increment('snapshot.pruned', result.count);
+      return result.count;
+    } catch (error) {
+      await this.metricsCollector.increment('snapshot.prune.failed', 1);
+      throw error;
+    }
+  }
+  
+  /**
+   * Updates a snapshot in the cache
+   */
+  private updateCache(snapshot: Snapshot, versionKey?: string): void {
+    const expiry = Date.now() + SnapshotStore.CACHE_TTL_MS;
+    
+    // Cache by exact version
+    const versionCacheKey = this.getCacheKey(
+      snapshot.documentId, 
+      snapshot.tenantId, 
+      versionKey || snapshot.version.toString()
+    );
+    
+    this.snapshotCache.set(versionCacheKey, {
+      snapshot,
+      expiry
+    });
+    
+    // If this is the latest version, also cache as 'latest'
+    if (versionKey !== 'latest') {
+      this.getLatestSnapshot(snapshot.documentId, snapshot.tenantId)
+        .then(latestSnapshot => {
+          if (latestSnapshot && snapshot.version >= latestSnapshot.version) {
+            const latestCacheKey = this.getCacheKey(
+              snapshot.documentId, 
+              snapshot.tenantId, 
+              'latest'
+            );
+            
+            this.snapshotCache.set(latestCacheKey, {
+              snapshot,
+              expiry
+            });
+          }
+        })
+        .catch(() => {
+          // Ignore caching errors - will just result in a cache miss later
+        });
+    }
+  }
+  
+  /**
+   * Generate a cache key for a snapshot
+   */
+  private getCacheKey(documentId: string, tenantId: string, versionKey: string): string {
+    return `${tenantId}:${documentId}:${versionKey}`;
+  }
+  
+  /**
+   * Clear cache entries based on a predicate function
+   */
+  private clearCacheByPredicate(
+    predicate: (entry: { snapshot: Snapshot; expiry: number }) => boolean
+  ): void {
+    for (const [key, entry] of this.snapshotCache.entries()) {
+      if (predicate(entry)) {
+        this.snapshotCache.delete(key);
+      }
+    }
+  }
+  
+  /**
+   * Periodically cleanup expired cache entries
+   */
+  startCacheCleanup(intervalMs: number = 60000): NodeJS.Timeout {
+    return setInterval(() => {
+      const now = Date.now();
+      for (const [key, entry] of this.snapshotCache.entries()) {
+        if (entry.expiry < now) {
+          this.snapshotCache.delete(key);
+        }
+      }
+    }, intervalMs);
   }
 }

@@ -1,8 +1,11 @@
-import { ConflictDetector, VersionedOperation } from '../../../src/collaboration/conflict/ConflictDetector';
+import { ConflictDetector, ConflictType } from '../../../src/collaboration/conflict/ConflictDetector';
 import { VectorClock } from '../../../src/collaboration/conflict/VectorClock';
 import { Operation } from '../../../src/collaboration/conflict/OperationalTransform';
 import { MetricsCollector } from '../../../src/metrics/collector';
+import { DocumentEvent } from '../../../src/collaboration/events/types';
 
+// Mock dependencies
+jest.mock('../../../src/metrics/collector');
 jest.mock('../../../src/compliance/logger', () => ({
   ComplianceLogger: {
     log: jest.fn().mockResolvedValue(undefined)
@@ -14,10 +17,14 @@ describe('ConflictDetector', () => {
   let metricsCollector: jest.Mocked<MetricsCollector>;
   
   beforeEach(() => {
+    // Set up mocks
     metricsCollector = {
       recordLatency: jest.fn().mockResolvedValue(undefined),
+      increment: jest.fn().mockResolvedValue(undefined),
+      recordValue: jest.fn().mockResolvedValue(undefined),
       track: jest.fn().mockResolvedValue(undefined),
-      increment: jest.fn().mockResolvedValue(undefined)
+      getAverageValue: jest.fn(),
+      getCountValue: jest.fn()
     } as unknown as jest.Mocked<MetricsCollector>;
     
     conflictDetector = new ConflictDetector(metricsCollector);

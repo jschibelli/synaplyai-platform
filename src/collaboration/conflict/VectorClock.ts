@@ -1,152 +1,126 @@
 /**
- * Vector clock implementation for establishing causality between events
- * in a distributed collaborative editing system.
+ * Represents a vector clock for tracking causality in distributed operations
+ * Each client has its own logical clock that increments with each local operation
  */
 export class VectorClock {
-  private clocks: Record<string, number>;
-
-  /**
-   * Create a new vector clock
-   * @param initialClocks Optional initial clock values
-   */
-  constructor(initialClocks?: Record<string, number>) {
-    this.clocks = initialClocks ? { ...initialClocks } : {};
+  private clock: Record<string, number>;
+  
+  constructor(initialClock?: Record<string, number>) {
+    this.clock = initialClock ? { ...initialClock } : {};
   }
-
+  
   /**
-   * Get the clock value for a specific client
-   * @param clientId Client identifier
-   * @returns The clock value, or 0 if not present
+   * Increments the counter for the specified node/client
    */
-  getClock(clientId: string): number {
-    return this.clocks[clientId] || 0;
+  increment(nodeId: string): VectorClock {
+    const updated = new VectorClock(this.clock);
+    updated.clock[nodeId] = (this.clock[nodeId] || 0) + 1;
+    return updated;
   }
-
+  
   /**
-   * Get all clock values
-   * @returns Record of all clock values
-   */
-  getClocks(): Record<string, number> {
-    return { ...this.clocks };
-  }
-
-  /**
-   * Increment the clock value for a specific client
-   * @param clientId Client identifier
-   * @returns Updated vector clock instance (for chaining)
-   */
-  increment(clientId: string): VectorClock {
-    this.clocks[clientId] = (this.clocks[clientId] || 0) + 1;
-    return this;
-  }
-
-  /**
-   * Update this vector clock by merging with another
-   * (taking the maximum values for each client)
-   * @param other Another vector clock to merge with
-   * @returns Updated vector clock instance (for chaining)
+   * Merges this vector clock with another, taking the maximum value for each nodeId
    */
   merge(other: VectorClock): VectorClock {
-    const otherClocks = other.getClocks();
+    const result = new VectorClock(this.clock);
     
-    for (const [clientId, value] of Object.entries(otherClocks)) {
-      this.clocks[clientId] = Math.max(this.getClock(clientId), value);
+    for (const [nodeId, timestamp] of Object.entries(other.getClock())) {
+      result.clock[nodeId] = Math.max(result.clock[nodeId] || 0, timestamp);
     }
     
-    return this;
+    return result;
   }
-
+  
   /**
-   * Check if this vector clock happened before another
-   * @param other Vector clock to compare with
-   * @returns True if this happened before other
+   * Returns the entire clock as an object
    */
-  happenedBefore(other: VectorClock): boolean {
-    // If any value in this clock is greater than the corresponding value
-    // in the other clock, then this did not happen before other
-    const otherClocks = other.getClocks();
-    let atLeastOneLess = false;
-    
-    // Check each key in this clock
-    for (const [clientId, value] of Object.entries(this.clocks)) {
-      const otherValue = otherClocks[clientId] || 0;
-      
-      if (value > otherValue) {
-        // This clock has a higher value, so it did not happen before
-        return false;
-      }
-      
-      if (value < otherValue) {
-        atLeastOneLess = true;
-      }
-    }
-    
-    // Check for keys in other that aren't in this
-    for (const clientId of Object.keys(otherClocks)) {
-      if (!(clientId in this.clocks) && otherClocks[clientId] > 0) {
-        atLeastOneLess = true;
-      }
-    }
-    
-    // For this to have happened before other, at least one value must be less
-    return atLeastOneLess;
+  getClock(): Record<string, number> {
+    return { ...this.clock };
   }
-
+  
   /**
-   * Check if this vector clock is concurrent with another
-   * (neither happened before the other)
-   * @param other Vector clock to compare with
-   * @returns True if clocks are concurrent
+   * Gets the timestamp for a specific node
    */
-  isConcurrentWith(other: VectorClock): boolean {
-    return !this.happenedBefore(other) && !other.happenedBefore(this);
+  getTimestamp(nodeId: string): number {
+    return this.clock[nodeId] || 0;
   }
-
+  
   /**
-   * Check if this vector clock equals another
-   * @param other Vector clock to compare with
-   * @returns True if clocks are equal
+   * Compares this vector clock with another to determine causality
+   * Returns:
+   * - 'before': this happened before other
+   * - 'after': this happened after other
+   * - 'concurrent': the operations happened concurrently
+   * - 'same': the vector clocks are identical
+   */
+  compare(other: VectorClock): 'before' | 'after' | 'concurrent' | 'same' {
+    if (this.equals(other)) {
+      return 'same';
+    }
+    
+    let thisBeforeOther = true;
+    let otherBeforeThis = true;
+    
+    const otherClock = other.getClock();
+    
+    // Check if this happened before other
+    for (const [nodeId, timestamp] of Object.entries(this.clock)) {
+      if (!(nodeId in otherClock) && timestamp > 0) {
+        otherBeforeThis = false;
+      } else if (timestamp > otherClock[nodeId]) {
+        otherBeforeThis = false;
+      }
+    }
+    
+    // Check if other happened before this
+    for (const [nodeId, timestamp] of Object.entries(otherClock)) {
+      if (!(nodeId in this.clock) && timestamp > 0) {
+        thisBeforeOther = false;
+      } else if (timestamp > (this.clock[nodeId] || 0)) {
+        thisBeforeOther = false;
+      }
+    }
+    
+    if (thisBeforeOther && !otherBeforeThis) return 'before';
+    if (!thisBeforeOther && otherBeforeThis) return 'after';
+    return 'concurrent';
+  }
+  
+  /**
+   * Checks if two vector clocks are equal
    */
   equals(other: VectorClock): boolean {
-    const thisKeys = Object.keys(this.clocks);
-    const otherKeys = Object.keys(other.getClocks());
+    const thisClock = this.clock;
+    const otherClock = other.getClock();
     
-    // Different number of keys means they can't be equal
-    if (thisKeys.length !== otherKeys.length) {
-      return false;
+    // Check if all keys in this clock match other clock
+    for (const nodeId in thisClock) {
+      if (thisClock[nodeId] !== otherClock[nodeId]) {
+        return false;
+      }
     }
     
-    // Check all values match
-    for (const clientId of thisKeys) {
-      if (this.clocks[clientId] !== other.getClock(clientId)) {
+    // Check if all keys in other clock match this clock
+    for (const nodeId in otherClock) {
+      if (otherClock[nodeId] !== thisClock[nodeId]) {
         return false;
       }
     }
     
     return true;
   }
-
+  
   /**
-   * Create a copy of this vector clock
-   * @returns New vector clock with same values
+   * Creates a JSON representation of the vector clock
    */
-  clone(): VectorClock {
-    return new VectorClock(this.getClocks());
+  toJSON(): Record<string, number> {
+    return { ...this.clock };
   }
-
+  
   /**
-   * Check if vector clock is empty (has no entries)
-   * @returns True if empty
+   * Creates a vector clock from JSON
    */
-  isEmpty(): boolean {
-    return Object.keys(this.clocks).length === 0;
-  }
-
-  /**
-   * Convert to string representation
-   * @returns String representation of vector clock
-   */
-  toString(): string {
-    return JSON.stringify(this.clocks);
+  static fromJSON(json: Record<string, number>): VectorClock {
+    return new VectorClock(json);
   }
 }

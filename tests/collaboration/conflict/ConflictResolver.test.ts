@@ -1,13 +1,16 @@
 import { ConflictResolver, ConflictType, ConflictResolutionStrategy, ConflictResolutionResult } from '../../../src/collaboration/conflict/ConflictResolver';
-import { ConflictDetector, VersionedOperation } from '../../../src/collaboration/conflict/ConflictDetector';
+import { ConflictDetector } from '../../../src/collaboration/conflict/ConflictDetector';
 import { OperationalTransform } from '../../../src/collaboration/conflict/OperationalTransform';
 import { VectorClock } from '../../../src/collaboration/conflict/VectorClock';
 import { MetricsCollector } from '../../../src/metrics/collector';
 import { EventStore } from '../../../src/collaboration/events/EventStore';
+import { BaseEvent } from '../../../src/collaboration/events/types';
+import { getTenantContext, setTenantContext, clearTenantContext } from '../../../src/lib/tenant-context';
 
 // Mock dependencies
 jest.mock('../../../src/metrics/collector');
 jest.mock('../../../src/collaboration/events/EventStore');
+jest.mock('../../../src/lib/tenant-context');
 jest.mock('../../../src/compliance/logger', () => ({
   ComplianceLogger: {
     log: jest.fn().mockResolvedValue(undefined)
@@ -35,12 +38,23 @@ describe('ConflictResolver', () => {
     eventStore = {
       appendEvent: jest.fn().mockResolvedValue({}),
       getEvents: jest.fn().mockResolvedValue([]),
-      replayEvents: jest.fn().mockResolvedValue([])
+      getEventCountSinceVersion: jest.fn().mockResolvedValue(0)
     } as unknown as jest.Mocked<EventStore>;
+    
+    // Mock tenant context
+    (getTenantContext as jest.Mock).mockReturnValue({
+      tenantId: 'test-tenant',
+      userId: 'test-user',
+      requestId: 'test-request'
+    });
     
     detector = new ConflictDetector(metricsCollector);
     transform = new OperationalTransform();
     resolver = new ConflictResolver(eventStore, metricsCollector, 'test-node');
+  });
+  
+  afterEach(() => {
+    jest.clearAllMocks();
   });
   
   describe('detectConflicts', () => {
@@ -57,7 +71,7 @@ describe('ConflictResolver', () => {
         },
         vectorClock: { user1: 1 },
         timestamp: new Date().toISOString()
-      };
+      } as BaseEvent;
       
       const remoteEvent = {
         id: 'event-2',
@@ -70,7 +84,7 @@ describe('ConflictResolver', () => {
         },
         vectorClock: { user2: 1 },
         timestamp: new Date().toISOString()
-      };
+      } as BaseEvent;
       
       // Detect conflicts
       const conflicts = await resolver.detectConflicts(localEvent, [remoteEvent]);
@@ -102,7 +116,7 @@ describe('ConflictResolver', () => {
         },
         vectorClock: { user1: 1 },
         timestamp: new Date().toISOString()
-      };
+      } as BaseEvent;
       
       const remoteEvent = {
         id: 'event-2',
@@ -116,7 +130,7 @@ describe('ConflictResolver', () => {
         },
         vectorClock: { user2: 1 },
         timestamp: new Date().toISOString()
-      };
+      } as BaseEvent;
       
       // Detect conflicts
       const conflicts = await resolver.detectConflicts(localEvent, [remoteEvent]);
@@ -140,7 +154,7 @@ describe('ConflictResolver', () => {
         },
         vectorClock: { user1: 1 },
         timestamp: new Date().toISOString()
-      };
+      } as BaseEvent;
       
       const remoteEvent = {
         id: 'event-2',
@@ -154,7 +168,7 @@ describe('ConflictResolver', () => {
         },
         vectorClock: { user2: 1 },
         timestamp: new Date().toISOString()
-      };
+      } as BaseEvent;
       
       // Detect conflicts
       const conflicts = await resolver.detectConflicts(localEvent, [remoteEvent]);
@@ -176,7 +190,7 @@ describe('ConflictResolver', () => {
         },
         vectorClock: { user1: 1 },
         timestamp: new Date().toISOString()
-      };
+      } as BaseEvent;
       
       const remoteEvent = {
         id: 'event-2',
@@ -189,7 +203,7 @@ describe('ConflictResolver', () => {
         },
         vectorClock: { user2: 1 },
         timestamp: new Date().toISOString()
-      };
+      } as BaseEvent;
       
       // Detect conflicts
       const conflicts = await resolver.detectConflicts(localEvent, [remoteEvent]);
@@ -210,7 +224,7 @@ describe('ConflictResolver', () => {
         },
         vectorClock: { user1: 1 },
         timestamp: new Date().toISOString()
-      };
+      } as BaseEvent;
       
       const remoteEvent = {
         id: 'event-2',
@@ -223,7 +237,7 @@ describe('ConflictResolver', () => {
         },
         vectorClock: { user2: 1 },
         timestamp: new Date().toISOString()
-      };
+      } as BaseEvent;
       
       // Detect conflicts
       const conflicts = await resolver.detectConflicts(localEvent, [remoteEvent]);
@@ -246,7 +260,7 @@ describe('ConflictResolver', () => {
         },
         vectorClock: { user1: 1, user2: 1 },
         timestamp: new Date().toISOString()
-      };
+      } as BaseEvent;
       
       const remoteEvent = {
         id: 'event-2',
@@ -259,7 +273,7 @@ describe('ConflictResolver', () => {
         },
         vectorClock: { user2: 1 },
         timestamp: new Date().toISOString()
-      };
+      } as BaseEvent;
       
       // Detect conflicts
       const conflicts = await resolver.detectConflicts(localEvent, [remoteEvent]);
@@ -285,7 +299,7 @@ describe('ConflictResolver', () => {
           },
           vectorClock: { user1: 1 },
           timestamp: new Date().toISOString()
-        },
+        } as BaseEvent,
         remote: {
           id: 'event-2',
           type: 'INSERT_TEXT',
@@ -297,7 +311,7 @@ describe('ConflictResolver', () => {
           },
           vectorClock: { user2: 1 },
           timestamp: new Date().toISOString()
-        },
+        } as BaseEvent,
         localRegion: { start: 5, end: 10 },
         remoteRegion: { start: 5, end: 10 }
       };
@@ -337,7 +351,7 @@ describe('ConflictResolver', () => {
           },
           vectorClock: { user1: 1 },
           timestamp: new Date().toISOString()
-        },
+        } as BaseEvent,
         remote: {
           id: 'event-2',
           type: 'FORMAT_TEXT',
@@ -350,7 +364,7 @@ describe('ConflictResolver', () => {
           },
           vectorClock: { user2: 1 },
           timestamp: new Date().toISOString()
-        },
+        } as BaseEvent,
         localRegion: { start: 0, end: 10 },
         remoteRegion: { start: 0, end: 10 }
       };
@@ -365,10 +379,11 @@ describe('ConflictResolver', () => {
       expect(resolution.result).toBe(ConflictResolutionResult.MERGED);
       expect(resolution.resolvedEvent).toBeDefined();
       
-      // Bold and italic should be merged
+      // Bold and italic should be merged, fontSize should use one value
       const mergedAttributes = resolution.resolvedEvent!.payload.attributes;
       expect(mergedAttributes.bold).toBe(true);
       expect(mergedAttributes.italic).toBe(true);
+      expect(mergedAttributes.fontSize).toBeDefined();
     });
     
     test('should resolve DELETE_MODIFIED conflicts by preserving modifications', async () => {
@@ -386,7 +401,7 @@ describe('ConflictResolver', () => {
           },
           vectorClock: { user1: 1 },
           timestamp: new Date().toISOString()
-        },
+        } as BaseEvent,
         remote: {
           id: 'event-2',
           type: 'INSERT_TEXT',
@@ -398,7 +413,7 @@ describe('ConflictResolver', () => {
           },
           vectorClock: { user2: 1 },
           timestamp: new Date().toISOString()
-        },
+        } as BaseEvent,
         localRegion: { start: 5, end: 15 },
         remoteRegion: { start: 7, end: 12 }
       };
@@ -429,7 +444,7 @@ describe('ConflictResolver', () => {
           },
           vectorClock: { user1: 1 },
           timestamp: new Date().toISOString()
-        },
+        } as BaseEvent,
         remote: {
           id: 'event-2',
           type: 'INSERT_TEXT',
@@ -441,7 +456,7 @@ describe('ConflictResolver', () => {
           },
           vectorClock: { user2: 1 },
           timestamp: new Date().toISOString()
-        },
+        } as BaseEvent,
         localRegion: { start: 5, end: 10 },
         remoteRegion: { start: 5, end: 10 }
       };
@@ -472,7 +487,7 @@ describe('ConflictResolver', () => {
           },
           vectorClock: { user1: 1 },
           timestamp: new Date().toISOString()
-        },
+        } as BaseEvent,
         remote: {
           id: 'event-2',
           type: 'INSERT_TEXT',
@@ -484,7 +499,7 @@ describe('ConflictResolver', () => {
           },
           vectorClock: { user2: 1 },
           timestamp: new Date().toISOString()
-        }
+        } as BaseEvent
       };
       
       // Resolve conflict with MANUAL strategy
@@ -515,7 +530,7 @@ describe('ConflictResolver', () => {
           },
           vectorClock: { user1: 1, user2: 1 },
           timestamp: new Date().toISOString()
-        },
+        } as BaseEvent,
         reason: 'Merged concurrent inserts'
       };
       
@@ -562,7 +577,7 @@ describe('ConflictResolver', () => {
         },
         vectorClock: { user1: 1 },
         timestamp: new Date().toISOString()
-      };
+      } as unknown as BaseEvent;
       
       // Mock remote events
       const remoteEvents = [
@@ -591,7 +606,7 @@ describe('ConflictResolver', () => {
           vectorClock: { user3: 1 },
           timestamp: new Date().toISOString()
         }
-      ];
+      ] as unknown as BaseEvent[];
       
       // Mock event store to return remote events
       eventStore.getEvents.mockResolvedValueOnce(remoteEvents);
@@ -618,7 +633,7 @@ describe('ConflictResolver', () => {
         },
         vectorClock: { user1: 1 },
         timestamp: new Date().toISOString()
-      };
+      } as unknown as BaseEvent;
       
       // Mock event store to return empty array (no remote events)
       eventStore.getEvents.mockResolvedValueOnce([]);
