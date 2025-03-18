@@ -3,13 +3,10 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-- Event sourcing architecture for document editing
-- Command/Query separation for editor operations
-- Snapshot mechanism for performance optimization
 - Custom AI command implementation
 - Integration of collaborative editing with AI assistance
 
-## [0.6.0] - 2025-04-12
+## [0.6.0] - 2025-03-17
 
 ### Added
 - Complete event sourcing architecture for document editing
@@ -25,6 +22,11 @@ All notable changes to this project will be documented in this file.
   - Implemented vector clock mechanism for causality tracking
 - Comprehensive metrics collection for conflict detection and resolution
 - Real-time collaborative editing with proper conflict handling
+- Command aggregator for performance optimization
+  - Intelligent command buffering with tenant isolation
+  - Adaptive buffer management based on system load
+  - Type-specific command merging strategies
+  - Intent-based command processing
 
 ### Changed
 - Extended database schema with Snapshot table
@@ -32,76 +34,24 @@ All notable changes to this project will be documented in this file.
 - Enhanced tenant isolation in collaborative editing context
 - Updated metrics collection to track conflict resolution efficiency
 - Optimized document reconstruction with snapshot-based approach
+- Enhanced command processing with aggregation strategies
 
 ### Fixed
 - Concurrent editing issues with proper conflict detection
 - Event ordering problems using vector clocks
 - Performance bottlenecks in document reconstruction
 - Tenant isolation edge cases in collaborative scenarios
-
-## Week 5-6: Enhanced Governance & Compliance Framework
-
-### Added
-- **Partitioned Immutable Logging**
-  - Created `ComplianceLog` table with timestamp-based partitioning
-  - Implemented SHA-256 integrity hashing for all compliance events
-  - Added database-level immutability via REVOKE commands
-  - Created automatic partition maintenance functions
-
-- **Multi-Stage Filtering Pipeline**
-  - Implemented three-tier filtering system:
-    - RegexFilterStage for fast pattern matching
-    - EmbeddingFilterStage for semantic matching
-    - LLMFilterStage for advanced content evaluation
-  - Added early exit optimization for performance
-  - Implemented parallel execution of compatible filter stages
-  - Created feature flag controls for progressive rollout
-
-- **Circuit Breakers & Bulkheads**
-  - Implemented `TenantAwareCircuitBreaker` with proper tenant isolation
-  - Created Redis-backed state management through `RedisCircuitBreakerStore`
-  - Added proper state transitions (CLOSED → OPEN → HALF_OPEN)
-  - Integrated circuit breaker events with compliance logging
-
-- **Redis-Based Time-Bucketed Metrics**
-  - Implemented `MetricsCollector` with tenant-aware metrics
-  - Added time-bucketed storage (minute, hour, day granularity)
-  - Created efficient Redis pipeline operations for high-volume metrics
-  - Added tenant-specific metrics aggregation
-
-- **Operational Dashboard Components**
-  - Circuit state visualization with `BreakerStatus` component
-  - Event timeline tracking through `MetricsAggregator`
-  - Real-time updates for circuit state changes
-  - p95/p99 latency calculations and visualization
-
-### Fixed
-- Fixed case-sensitivity issue in EmbeddingFilterStage with lowercase conversion
-- Fixed performance issue in parallel filter execution with proper Promise handling
-- Corrected timeout handling in LLM filter to prevent hanging requests
-- Fixed metrics interface to ensure proper type consistency
-- Resolved missing tenant context in filter pipeline
-- Fixed circuit breaker state transitions with proper locking
-- Corrected circuit breaker half-open state handling
-
-### Improved
-- Enhanced test coverage for all compliance components
-- Optimized filter pipeline for early exit and parallel execution
-- Improved circuit breaker resilience with proper error handling
-- Enhanced metrics collection with efficient Redis pipelining
-- Optimized compliance log queries with proper indexing
+- Command processing overhead during intensive editing
 
 ### Documentation
-- Added detailed documentation for Circuit Breaker pattern
-- Created comprehensive guide for Multi-Stage Filtering Pipeline
-- Documented Compliance Framework architecture and components
-- Added usage examples and best practices for all components
-- Created complete Redis setup and configuration documentation with examples
-- Developed tenant isolation architecture documentation with implementation patterns
-- Added comprehensive usage tracking documentation with metrics collection details
-- Updated README with links to all documentation files
+- Added comprehensive documentation for the event sourcing architecture
+- Created detailed guides for the snapshot mechanism and conflict resolution
+- Documented vector clock implementation and operational transforms
+- Added documentation for the command pattern and command aggregator
+- Created integration documentation for the collaborative editing system
+- Updated technical specifications with performance benchmarks
 
-## [0.5.0] - 2025-04-05
+## [0.5.0] - 2025-03-05
 
 ### Added
 - Partitioned immutable logging with compliance audit trail
@@ -127,7 +77,7 @@ All notable changes to this project will be documented in this file.
 - Redis connection handling in metrics tests
 - Circuit breaker state transition edge cases
 
-## [0.4.0] - 2025-03-16
+## [0.4.0] - 2025-02-16
 
 ### Added
 - Redis integration for usage tracking
@@ -152,7 +102,7 @@ All notable changes to this project will be documented in this file.
 - Usage tracking edge cases
 - Test suite cleanup and proper mocking
 
-## [0.3.0] - 2025-03-25
+## [0.3.0] - 2025-01-25
 
 ### Added
 - Tenant isolation implementation with AsyncLocalStorage
@@ -175,7 +125,7 @@ All notable changes to this project will be documented in this file.
 - Content filtering edge cases
 - Tenant context persistence in async operations
 
-## [0.2.0] - 2025-03-21
+## [0.2.0] - 2025-01-21
 
 ### Added
 - Rich text editor implementation with Tiptap
@@ -196,7 +146,7 @@ All notable changes to this project will be documented in this file.
 - AI service connection failures with timeout handling
 - Model selection persistence between editing sessions
 
-## [0.1.0] - 2025-03-14
+## [0.1.0] - 2025-01-14
 
 ### Added
 - Initial project plan with overview, goals, roles & responsibilities, milestones & timeline, communication plan, risks & challenges, and next steps.
