@@ -1,6 +1,6 @@
 import { UsageRedisSchema } from './redis-schema';
 import { SubscriptionManager } from '../SubscriptionManager';
-import { CircuitBreaker } from '../../lib/circuitBreaker';
+import { CircuitBreaker } from '../../lib/circuit-breaker';
 import redisClient from '../../config/redis.config';
 
 export class UsageTracker {

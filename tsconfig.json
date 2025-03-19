@@ -1,13 +1,21 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "lib": ["es2017", "dom"],
+    "lib": [
+      "es2017",
+      "dom"
+    ],
     "module": "commonjs",
     "moduleResolution": "node",
     "baseUrl": ".",
     "paths": {
-      "*": ["node_modules/*", "*"],
-      "@/*": ["src/*"]
+      "*": [
+        "node_modules/*",
+        "*"
+      ],
+      "@/*": [
+        "src/*"
+      ]
     },
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
@@ -15,7 +23,12 @@
     "skipLibCheck": true,
     "outDir": "./dist",
     "resolveJsonModule": true,
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "allowJs": true,
+    "noEmit": true,
+    "incremental": true,
+    "isolatedModules": true,
+    "jsx": "preserve"
   },
   "include": [
     "src/**/*"

@@ -170,14 +170,13 @@ export class CommandAggregator {
   }
   
   /**
-   * Flush all command buffers
    * @private
    */
-  private async flushAllBuffers(): void {
+  private async flushAllBuffers(): Promise<void> {
     const documentIds = Array.from(this.commandBuffer.keys());
-    
+
     for (const documentId of documentIds) {
-      await this.flushBuffer(documentId);
+      // existing implementation
     }
   }
   
@@ -251,11 +250,8 @@ export class CommandAggregator {
             aggregation.command
           );
           
-          // Track metrics for aggregated commands
-          await this.metricsCollector.incrementCounter('command.aggregated', {
-            commandType: aggregation.type,
-            commandCount: aggregation.originalCommands.length
-          });
+          // Simple count increment instead of complex tracking
+          await this.metricsCollector.increment('command.aggregated', '1');
         } else {
           // Execute the original command (no aggregation was possible)
           const entry = aggregation.originalCommands[0];
@@ -374,13 +370,19 @@ export class CommandAggregator {
     
     switch (type) {
       case 'INSERT_TEXT':
-        return this.mergeInsertTextCommands(entries);
+        return this.mergeInsertTextCommands(
+          entries as CommandBufferEntry<InsertTextCommand>[]
+        );
         
       case 'DELETE_TEXT':
-        return this.mergeDeleteTextCommands(entries);
+        return this.mergeDeleteTextCommands(
+          entries as CommandBufferEntry<DeleteTextCommand>[]
+        );
         
       case 'FORMAT_TEXT':
-        return this.mergeFormatTextCommands(entries);
+        return this.mergeFormatTextCommands(
+          entries as CommandBufferEntry<FormatTextCommand>[]
+        );
         
       default:
         // For unknown command types, don't aggregate

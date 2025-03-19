@@ -2,21 +2,56 @@
 
 ## Executive Summary
 
-The AI Command Implementation extends the command pattern architecture to seamlessly integrate AI-powered operations into the document editing experience. This architecture enables context-aware AI editing assistance, maintains tenant isolation, and preserves the performance characteristics of the command system while adding intelligent capabilities throughout the editing workflow.
+The AI Command Implementation represents a sophisticated architectural pattern that extends the standard command pattern to integrate AI capabilities directly into the document editing workflow. This architecture enables a seamless blend of AI assistance while maintaining the system's reliability, security, and performance characteristics.
 
-By integrating AI directly into the command pipeline, we achieve several strategic advantages:
+By strategically integrating AI capabilities within the command pattern, this architecture achieves several critical business advantages:
 
-1. **Unified Processing Model**: AI commands flow through the same validation, authorization, and execution pipeline as user commands
-2. **Context-Aware Operations**: Commands can leverage document semantics for intelligent assistance
-3. **Composable Intelligence**: Complex AI operations decompose into granular, auditable commands
-4. **Tenant-Specific Behavior**: AI capabilities adapt to tenant preferences and policies
-5. **Optimized Performance**: Intelligent context management prevents unnecessary token usage
+1. **Unified Governance Model**: AI operations flow through the same validation, authorization, and execution pipelines as user commands, ensuring consistent security and auditability
+2. **Contextual Intelligence**: Commands leverage document semantics and structure to provide highly relevant assistance based on the user's current context
+3. **Composable AI Operations**: Complex AI operations decompose into granular, auditable commands that preserve the event-sourced history
+4. **Tenant-Isolated AI Behavior**: AI capabilities automatically adapt to tenant-specific rules, preferences, and compliance requirements
+5. **Cost-Optimized Processing**: Intelligent context management reduces unnecessary token usage while maintaining quality AI outputs
 
-## Core Components
+This architecture addresses the key challenges organizations face when adding AI capabilities to enterprise systems: maintaining security boundaries, controlling costs, ensuring performance, and preserving auditability.
+
+## Strategic Architecture Overview
+
+### System Architecture Diagram
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│                 │     │                 │     │                 │
+│  Document       │────►│ AI Command      │────►│ Command         │
+│  Editor         │     │ Registry        │     │ Processor       │
+│                 │     │                 │     │                 │
+└─────────────────┘     └────────┬────────┘     └────────┬────────┘
+                                 │                       │
+                                 ▼                       ▼
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│                 │     │                 │     │                 │
+│   Context       │◄────┤   AI Service    │     │  Event Store    │
+│   Provider      │     │                 │     │                 │
+│                 │     │                 │     │                 │
+└─────────────────┘     └────────┬────────┘     └─────────────────┘
+                                 │
+                                 ▼
+                        ┌─────────────────┐
+                        │                 │
+                        │  AI Models &    │
+                        │  Providers      │
+                        │                 │
+                        └─────────────────┘
+```
+
+## Core Strategic Components
+
+The architecture consists of several key components, each designed to address specific strategic concerns:
 
 ### 1. AI Command Registry
 
-The AI Command Registry extends the standard command registry with AI-specific capabilities:
+**Strategic Purpose**: Provides a secure, extensible registration system for AI-powered commands while maintaining tenant isolation and usage controls.
+
+The AI Command Registry extends the standard command registry with specialized middleware for AI operations:
 
 ```typescript
 class AICommandRegistry extends CommandRegistry {
@@ -65,217 +100,153 @@ class AICommandRegistry extends CommandRegistry {
     };
   }
 }
+```
 
-// Token usage tracking middleware
-function createUsageTrackingMiddleware(usageTracker: UsageTracker) {
-  return async (command: AICommand, next: NextFunction) => {
-    // Pre-execution tracking
-    await usageTracker.trackRequestStart({
-      tenantId: getTenantContext().tenantId,
-      commandType: command.type,
-      estimatedTokens: estimateCommandTokens(command)
-    });
-    
-    try {
-      // Execute command
-      const result = await next(command);
-      
-      // Post-execution tracking
-      await usageTracker.trackRequestComplete({
-        tenantId: getTenantContext().tenantId,
-        commandType: command.type,
-        actualTokens: countResultTokens(result),
-        success: true
-      });
-      
-        ...insertResult.metadata,
-        aiGenerated: true,
-        prompt: command.prompt,
-        modelId: analysis.modelIduestComplete({
-      } tenantId: getTenantContext().tenantId,
-    };  commandType: command.type,
-  };    success: false,
-        error: error.message
-// Rewrite selection handler
-const rewriteSelectionHandler: AICommandHandler<RewriteSelectionCommand, TextReplacedEvent> = 
-  async (command, context, analysis) => {
-    // Use AI to rewrite the selected text
-    const rewrittenText = analysis.content;
-    
-    // Create a replace text command from AI result
-    const replaceCommand: ReplaceTextCommand = {
-      type: 'REPLACE_TEXT',imiter() {
-      documentId: command.documentId,ext: NextFunction) => {
-      startPosition: command.startPosition,antId;
-      endPosition: command.endPosition,
-      newText: rewrittenText,tenant
-      userId: command.userIdteLimiter.checkLimit(tenantId, command.type);
-    };
-    if (!allowed) {
-    // Execute standard commandit exceeded for ${command.type}`);
-    const replaceResult = await commandRegistry.execute(replaceCommand);
-    
-    // Return event with AI-specific metadata
-    return {ext(command);
-      ...replaceResult,
-      metadata: {
-        ...replaceResult.metadata,
-        aiGenerated: true,andler
-        instructions: command.instructions,<CompleteTextCommand, TextCompletedEvent> = 
-  async (command, context, analysis) => {
-    // Use AI analysis to generate appropriate text completion
-    const generatedText = analysis.content;
-    
-    // Create a standard insert text command from AI result
-    const insertCommand: InsertTextCommand = {
-      type: 'INSERT_TEXT',gistry
-      documentId: command.documentId,
-      position: command.position,iService,
-      text: generatedText,  contextProvider,
-      userId: command.userId
-    };
-    
-    // Execute the standard command
-    const insertResult = await commandRegistry.execute(insertCommand);mmandRegistry.registerAICommand<CompleteTextCommand, TextCompletedEvent>(
-    
-    // Return event with AI-specific metadataompleteTextHandler,
-    return {  {
-      ...insertResult,
-      metadata: {
-        ...insertResult.metadata,
-        aiGenerated: true,
-        prompt: command.prompt,
-        modelId: analysis.modelIdaiCommandRegistry.registerAICommand<RewriteSelectionCommand, TextReplacedEvent>(
-      }
-    };
-  };
- validator: validateRewriteSelectionCommand,
-// Rewrite selection handler   authorizer: authorizeAICommand
-  }st rewriteSelectionHandler: AICommandHandler<RewriteSelectionCommand, TextReplacedEvent> = 
-);async (command, context, analysis) => {);
-    // Use AI to rewrite the selected text
-aiCommandRegistry.registerAICommand<SummarizeSelectionCommand, TextReplacedEvent>(marizeSelectionCommand, TextReplacedEvent>(
-  'SUMMARIZE_SELECTION',
-  summarizeSelectionHandler, command from AI result  summarizeSelectionHandler,
-  { const replaceCommand: ReplaceTextCommand = {
-    validator: validateSummarizeSelectionCommand:onCommand,
-    authorizer: authorizeAICommandId,: authorizeAICommand
-  }   startPosition: command.startPosition,
-);    endPosition: command.endPosition,
-```   newText: rewrittenText,
-      userId: command.userId
+This design offers several strategic advantages:
+
+1. **Middleware Pipeline**: Specialized middleware enables tenant-aware rate limiting, usage tracking, and context capture
+2. **Command Wrapping**: The registry automatically wraps command handlers with AI capabilities, simplifying implementation
+3. **Conditional Analysis**: The system can optimize performance by skipping AI analysis for commands that don't require it
+
 ### 2. Context Provider
-    
-The Context Provider is responsible for extracting and providing the necessary context for AI operations:sary context for AI operations:
-    const replaceResult = await commandRegistry.execute(replaceCommand);
+
+**Strategic Purpose**: Intelligently extracts and manages document context to maximize AI effectiveness while minimizing token usage.
+
+The Context Provider strategically balances context quality against token costs:
+
 ```typescript
+class ContextProvider {
+  constructor(
+    private documentRepository: DocumentRepository,
+    private tenantProvider: TenantProvider
+  ) {}
+
+  async getContext(
+    documentId: string,
+    parameters: ContextParameters
+  ): Promise<DocumentContext> {
+    // Get tenant context
+    const tenantContext = this.tenantProvider.getCurrentContext();
+    if (!tenantContext) {
+      throw new Error('No tenant context available');
+    }
+
+    // Get document with tenant context for isolation
+    const document = await this.documentRepository.getDocument(
+      documentId,
+      tenantContext.tenantId
+    );
+
+    // Create context based on parameters
+    return {
+      tenantContext,
+      document,
+      precedingText: this.extractPrecedingText(document, parameters),
+      followingText: this.extractFollowingText(document, parameters),
+      documentStructure: this.extractStructure(document),
       activeSectionContent: this.extractActiveSection(document, parameters),
-      documentMetadata: document.metadata,
-      tenantContextring;ult,
-    };mentStructure: DocumentStructure;metadata: {
-  }ctiveSectionContent: string;     ...replaceResult.metadata,
-  documentMetadata: DocumentMetadata;        aiGenerated: true,
+      documentMetadata: document.metadata
+    };
+  }
+
   private extractPrecedingText(document: Document, params: ContextParameters): string {
     // Implement semantic chunk extraction with token limits
     // Use overlapping windows if needed for context continuity
     const position = params.position || document.content.length;
     const windowSize = params.windowSize || 1000;
-    private documentRepository: DocumentRepository,
+    
     // Get text before position with intelligent paragraph boundaries
     return this.getSemanticChunk(document, position - windowSize, position);
-  }turn this.getSemanticChunk(document, position, position + windowSize);
-  async getContext(  }
-  private extractFollowingText(document: Document, params: ContextParameters): string {
-    // Similar implementation for text after the current positionmentation for text after the current position
-    const position = params.position || 0;tences)    const position = params.position || 0;
-    const windowSize = params.windowSize || 1000;y(document, start);dowSize || 1000;
-    const tenantContext = this.tenantProvider.getCurrentContext();const expandedEnd = this.findNextParagraphBoundary(document, end);
-    return this.getSemanticChunk(document, position, position + windowSize);
-  }   throw new Error('No tenant context available'); return document.content.substring(expandedStart, expandedEnd);
-    }  }
+  }
+
   private getSemanticChunk(document: Document, start: number, end: number): string {
-    // Expand to semantic boundaries (paragraphs, sentences) boundaries (paragraphs, sentences)
+    // Expand to semantic boundaries (paragraphs, sentences)
     const expandedStart = this.findPreviousParagraphBoundary(document, start);
     const expandedEnd = this.findNextParagraphBoundary(document, end);
-      tenantContext.tenantId// Create a simplified structural representation    
+    
     return document.content.substring(expandedStart, expandedEnd);
   }
-    // Create context based on parameters  private extractActiveSection(document: Document, params: ContextParameters): string {
-  // Additional helper methods for structure extraction
-  private extractStructure(document: Document): DocumentStructure {), Document): DocumentStructure {
-    // Extract headings, sections, lists, etc.(document, parameters),tc.
-    // Create a simplified structural representationent),
-  }   activeSectionContent: this.extractActiveSection(document, parameters),
-      documentMetadata: document.metadata,
-  private extractActiveSection(document: Document, params: ContextParameters): string {
-    // Get the content of the current section based on cursor position
-    // Uses semantic section detectionanalysis, prompt preparation, and interaction with AI models:
-  }
-} private extractPrecedingText(document: Document, params: ContextParameters): string {``typescript
- // Implement semantic chunk extraction with token limitsss AIService {
-function optimizeContextWindow(    // Use overlapping windows if needed for context continuity  constructor(
-  document: Document,n = params.position || document.content.length;itBreaker: CircuitBreaker,### 3. AI Service
-  position: number,    const windowSize = params.windowSize || 1000;    private metricsCollector: MetricsCollector,
-  requestedSize: number,
-  maxTokens: number    // Get text before position with intelligent paragraph boundaries    private tokenLimiter: TokenLimiter,
-): string {is.getSemanticChunk(document, position - windowSize, position);ilterPipeline: ContentFilterPipeline
-  // Start with the requested window
-  let context = document.getTextWindow(position, requestedSize);
-  cument, params: ContextParameters): string { CircuitBreaker,
-  // Estimate tokense current positionollector,
-  let estimatedTokens = estimateTokens(context);FlagService,
-  e || 1000;enLimiter,
-  if (estimatedTokens <= maxTokens) {
-    return context;turn this.getSemanticChunk(document, position, position + windowSize);nst operationId = generateUuid();
-  }  }    const startTime = performance.now();
-  entCounter('ai.analysis.started', {
-  // If too large, implement intelligent trimming:  private getSemanticChunk(document: Document, start: number, end: number): string {      tenantId: context.tenantContext.tenantId,
-  // 1. Try reducing to semantic boundaries (paragraphs)    // Expand to semantic boundaries (paragraphs, sentences)      operationType: parameters.type
-  context = reduceToNearestParagraphBoundaries(context, maxTokens);    const expandedStart = this.findPreviousParagraphBoundary(document, start);    });
-  estimatedTokens = estimateTokens(context);    const expandedEnd = this.findNextParagraphBoundary(document, end);
-          try {
-  if (estimatedTokens <= maxTokens) {    return document.content.substring(expandedStart, expandedEnd);      // Check if feature is enabled for tenant
-    return context;  }      if (!await this.featureFlags.isEnabled(
-  }        `ai-command.${parameters.type}`,
-    // Additional helper methods for structure extraction        context.tenantContext.tenantId
-  // 2. Try extracting key sections (headings and their content)  private extractStructure(document: Document): DocumentStructure {      )) {
-  context = extractKeyHeadingsAndContent(document, position, maxTokens);    // Extract headings, sections, lists, etc.        throw new Error(`AI command type ${parameters.type} is not enabled for this tenant`);
-  estimatedTokens = estimateTokens(context);    // Create a simplified structural representation      }
-    }
-  if (estimatedTokens <= maxTokens) {      // Check token usage limits
-    return context;  private extractActiveSection(document: Document, params: ContextParameters): string {      const estimatedTokens = this.estimateTokens(context, parameters);
-  }    // Get the content of the current section based on cursor position      await this.tokenLimiter.checkAndReserveTokens(
-      // Uses semantic section detection        context.tenantContext.tenantId,
-  // 3. Last resort: truncate with preference to text around cursor  }        estimatedTokens
-  return truncateAroundPosition(context, position, maxTokens);}      );
-}```
-```      // Prepare prompt with tenant-specific customizations
-### 3. AI Service      const prompt = await this.preparePrompt(context, parameters);
+}
+```
+
+The strategic benefits of this approach include:
+
+1. **Semantic Boundaries**: By extracting text at natural paragraph and sentence boundaries, the system provides more coherent context to AI models
+2. **Token Optimization**: Configurable window sizes allow for precise control over token usage
+3. **Structure Awareness**: Including document structure helps AI models understand the hierarchical context
+4. **Tenant Isolation**: Automatic tenant context integration ensures security boundaries are maintained
+
 ### 3. AI Service
-The AI Service handles the execution of AI operations, including context analysis, prompt preparation, and interaction with AI models:      // Filter prompt through content filter
-The AI Service handles the execution of AI operations, including context analysis, prompt preparation, and interaction with AI models:      const filterResult = await this.filterPipeline.process(prompt);
-```typescript      if (filterResult.result === 'BLOCKED') {
-```typescriptclass AIService {        throw new Error(`Content filter blocked prompt: ${filterResult.reason}`);
-class AIService {  constructor(      }
-  constructor(    private circuitBreaker: CircuitBreaker,
-    private circuitBreaker: CircuitBreaker,    private metricsCollector: MetricsCollector,      // Execute AI operation through circuit breaker
-    private metricsCollector: MetricsCollector,    private featureFlags: FeatureFlagService,      const result = await this.circuitBreaker.execute(async () => {
-    private featureFlags: FeatureFlagService,    private tokenLimiter: TokenLimiter,        return this.executeAIOperation(prompt, parameters);
-    private tokenLimiter: TokenLimiter,    private filterPipeline: ContentFilterPipeline      });
-    private filterPipeline: ContentFilterPipeline  ) {}
-  ) {}      // Filter result through content filter
-  async analyze(      const responseFilterResult = await this.filterPipeline.process(result.content);
-  async analyze(      if (responseFilterResult.result === 'BLOCKED') {
+
+**Strategic Purpose**: Manages the execution of AI operations with proper error handling, metrics, and tenant-specific configurations.
+
+The AI Service provides a robust interface for AI operations with comprehensive safety measures:
+
+```typescript
+class AIService {
+  constructor(
+    private circuitBreaker: CircuitBreaker,
+    private metricsCollector: MetricsCollector,
+    private featureFlags: FeatureFlagService,
+    private tokenLimiter: TokenLimiter,
+    private filterPipeline: ContentFilterPipeline
+  ) {}
+
+  async analyze(
+    context: DocumentContext,
+    parameters: AIAnalysisParameters
+  ): Promise<AIAnalysisResult> {
+    const operationId = generateUuid();
+    const startTime = performance.now();
+    
+    this.metricsCollector.incrementCounter('ai.analysis.started', {
+      tenantId: context.tenantContext.tenantId,
+      operationType: parameters.type
+    });
+    
+    try {
+      // Check if feature is enabled for tenant
+      if (!await this.featureFlags.isEnabled(
+        `ai-command.${parameters.type}`,
+        context.tenantContext.tenantId
+      )) {
+        throw new Error(`AI command type ${parameters.type} is not enabled for this tenant`);
+      }
+      
+      // Check token usage limits
+      const estimatedTokens = this.estimateTokens(context, parameters);
+      await this.tokenLimiter.checkAndReserveTokens(
+        context.tenantContext.tenantId,
+        estimatedTokens
+      );
+      
+      // Prepare prompt with tenant-specific customizations
+      const prompt = await this.preparePrompt(context, parameters);
+      
+      // Filter prompt through content filter
+      const filterResult = await this.filterPipeline.process(prompt);
+      if (filterResult.result === 'BLOCKED') {
+        throw new Error(`Content filter blocked prompt: ${filterResult.reason}`);
+      }
+      
+      // Execute AI operation through circuit breaker
+      const result = await this.circuitBreaker.execute(async () => {
+        return this.executeAIOperation(prompt, parameters);
+      });
+      
+      // Filter result through content filter
+      const responseFilterResult = await this.filterPipeline.process(result.content);
+      if (responseFilterResult.result === 'BLOCKED') {
         throw new Error(`Content filter blocked AI response: ${responseFilterResult.reason}`);
       }
-
+      
       // Track successful completion
       const duration = performance.now() - startTime;
       this.metricsCollector.recordValue('ai.analysis.duration', duration, {
         tenantId: context.tenantContext.tenantId,
         operationType: parameters.type
       });
-
+      
       return result;
     } catch (error) {
       // Track failure
@@ -284,303 +255,26 @@ class AIService {  constructor(      }
         operationType: parameters.type,
         errorType: error.name
       });
-
+      
       throw error;
     }
   }
-
-  private async preparePrompt(
-    context: DocumentContext,
-    parameters: AIAnalysisParameters
-  ): string {
-    // Get tenant-specific prompt template
-    const template = await this.getPromptTemplate(
-      parameters.type,
-      context.tenantContext.tenantId
-    );
-
-    // Fill template with context and parameters
-    return this.renderPromptTemplate(template, context, parameters);
-  }
-
-  private async executeAIOperation(
-    prompt: string,
-    parameters: AIAnalysisParameters
-  ): Promise<AIAnalysisResult> {
-    // Select appropriate model based on parameters and tenant settings
-    const model = await this.selectAppropriateModel(parameters);
-
-    // Execute request to AI provider
-    return await model.complete(prompt, parameters.completionOptions);
-  }
 }
 ```
 
-### 4. AI Command Interfaces
+This implementation offers critical safety and performance features:
 
-The AI Command Interfaces define the structure of various AI-powered commands:
+1. **Circuit Breaking**: Prevents cascading failures when AI providers experience issues
+2. **Content Filtering**: Applies bidirectional content filtering for both prompts and responses
+3. **Feature Flag Integration**: Enables granular control over AI features by tenant
+4. **Token Management**: Enforces token limits to control costs
+5. **Comprehensive Metrics**: Tracks performance and error rates for monitoring and optimization
 
-```typescript
-interface AICommand extends Command {
-  requiresAIAnalysis: boolean;
-  analysisParameters?: AIAnalysisParameters;
-  contextParameters: ContextParameters;
-}
+### 4. Tenant AI Settings
 
-interface CompleteTextCommand extends AICommand {
-  position: number;
-  prefixLength: number;
-  prompt?: string;
-  styleCriteria?: StyleCriteria;
-}
+**Strategic Purpose**: Provides tenant-specific customization of AI behavior, including model selection, prompt templates, and usage limits.
 
-interface RewriteSelectionCommand extends AICommand {
-  startPosition: number;
-  endPosition: number;
-  originalText: string;
-  instructions: string;
-  styleCriteria?: StyleCriteria;
-}
-
-interface SummarizeSelectionCommand extends AICommand {
-  startPosition: number;
-  endPosition: number;
-  targetLength?: number;
-  format?: 'paragraph' | 'bullets' | 'numbered';
-}
-
-interface GenerateFromOutlineCommand extends AICommand {
-  outline: string[];
-  targetSection: string;
-  tone?: string;
-  length?: number;
-}
-
-interface ImproveWritingCommand extends AICommand {
-  startPosition: number;
-  endPosition: number;
-  aspects: ('clarity' | 'conciseness' | 'grammar' | 'tone')[];
-  intensity?: number; // 1-10 scale for how aggressive the changes should be
-}
-```
-
-### 5. AI Command Cache
-
-The AI Command Cache provides caching capabilities for AI command results to improve performance and reduce redundant computations:
-
-```typescript
-class AICommandCache {
-  private cache: Map<string, CachedResult> = new Map();
-  
-  async getOrExecute<T extends AICommand, R>(
-    command: T,
-    executor: () => Promise<R>
-  ): Promise<R> {
-    // Generate cache key from command properties
-    const cacheKey = this.generateCacheKey(command);
-    
-    // Check for cached result
-    const cachedResult = this.cache.get(cacheKey);
-    if (cachedResult && !this.isExpired(cachedResult)) {
-      return cachedResult.result as R;
-    }
-    
-    // Execute command
-    const result = await executor();
-    
-    // Cache result
-    this.cache.set(cacheKey, {
-      result,
-      timestamp: Date.now(),
-      commandType: command.type
-    });
-    
-    return result;
-  }
-  
-  private generateCacheKey(command: AICommand): string {
-    // Create a unique key based on command properties
-    // Include tenant ID for isolation
-    return `${getTenantContext().tenantId}:${command.type}:${
-      createHash(JSON.stringify(command))
-    }`;
-  }
-  
-  private isExpired(cachedResult: CachedResult): boolean {
-    const ttl = this.getTtlForCommandType(cachedResult.commandType);
-    return Date.now() - cachedResult.timestamp > ttl;
-  }
-  
-  private getTtlForCommandType(type: string): number {
-    // Different TTLs for different command types
-    switch (type) {
-      case 'COMPLETE_TEXT':
-        return 1000 * 60 * 5; // 5 minutes
-      case 'SUMMARIZE_SELECTION':
-        return 1000 * 60 * 15; // 15 minutes
-      default:
-        return 1000 * 60 * 10; // 10 minutes
-    }
-  }
-}
-```
-
-### 6. AI Command Batcher
-
-The AI Command Batcher groups similar AI commands together to optimize execution and reduce latency:
-
-```typescript
-class AICommandBatcher {
-  private batches: Map<string, BatchEntry[]> = new Map();
-  private timers: Map<string, NodeJS.Timeout> = new Map();
-  
-  async scheduleCommand<T extends AICommand>(
-    command: T,
-    executor: (commands: T[]) => Promise<any[]>
-  ): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const batchKey = this.getBatchKey(command);
-      
-      // Initialize batch if needed
-      if (!this.batches.has(batchKey)) {
-        this.batches.set(batchKey, []);
-      }
-      
-      // Add to batch
-      const batch = this.batches.get(batchKey)!;
-      batch.push({
-        command,
-        resolve,
-        reject
-      });
-      
-      // Reset timer
-      if (this.timers.has(batchKey)) {
-        clearTimeout(this.timers.get(batchKey)!);
-      }
-      
-      // Set timeout to process batch
-      this.timers.set(
-        batchKey,
-        setTimeout(() => this.processBatch(batchKey, executor), 50)
-      );
-    });
-  }
-  
-  private async processBatch(
-    batchKey: string,
-    executor: (commands: AICommand[]) => Promise<any[]>
-  ): Promise<void> {
-    const batch = this.batches.get(batchKey) || [];
-    this.batches.delete(batchKey);
-    this.timers.delete(batchKey);
-    
-    if (batch.length === 0) {
-      return;
-    }
-    
-    try {
-      // Execute batch
-      const commands = batch.map(entry => entry.command);
-      const results = await executor(commands);
-      
-      // Resolve promises
-      batch.forEach((entry, index) => {
-        entry.resolve(results[index]);
-      });
-    } catch (error) {
-      // Reject all promises in batch
-      batch.forEach(entry => {
-        entry.reject(error);
-      });
-    }
-  }
-  
-  private getBatchKey(command: AICommand): string {
-    // Group commands by type and document
-    return `${getTenantContext().tenantId}:${command.documentId}:${command.type}`;
-  }
-}
-```
-
-### 7. Tenant AI Limiter
-
-The Tenant AI Limiter enforces tenant-specific limits on AI command usage to ensure fair resource allocation and prevent abuse:
-
-```typescript
-class TenantAILimiter {
-  constructor(
-    private tenantSettingsService: TenantSettingsService,
-    private usageRepository: UsageRepository,
-    private featureFlags: FeatureFlagService
-  ) {}
-  
-  async checkCommandLimit(
-    command: AICommand,
-    tenantId: string
-  ): Promise<void> {
-    // Check if AI feature is enabled for tenant
-    const featureEnabled = await this.featureFlags.isEnabled(
-      'ai-commands',
-      tenantId
-    );
-    
-    if (!featureEnabled) {
-      throw new Error('AI commands are not enabled for this tenant');
-    }
-    
-    // Get tenant-specific limits
-    const limits = await this.tenantSettingsService.getAILimits(tenantId);
-    
-    // Check command-specific limits
-    if (limits.commandLimits[command.type]) {
-      const commandLimit = limits.commandLimits[command.type];
-      
-      // Check rate limits
-      await this.checkRateLimit(tenantId, command.type, commandLimit.rateLimit);
-      
-      // Check token limits
-      const estimatedTokens = estimateCommandTokens(command);
-      await this.checkTokenLimit(tenantId, estimatedTokens, commandLimit.tokenLimit);
-    }
-  }
-  
-  private async checkRateLimit(
-    tenantId: string,
-    commandType: string,
-    rateLimit: RateLimit
-  ): Promise<void> {
-    const usage = await this.usageRepository.getRecentCommandCount(
-      tenantId,
-      commandType,
-      rateLimit.windowMs
-    );
-    
-    if (usage >= rateLimit.maxRequests) {
-      throw new Error(`Rate limit exceeded for ${commandType}`);
-    }
-  }
-  
-  private async checkTokenLimit(
-    tenantId: string,
-    estimatedTokens: number,
-    tokenLimit: TokenLimit
-  ): Promise<void> {
-    const usage = await this.usageRepository.getCurrentTokenUsage(
-      tenantId,
-      tokenLimit.windowMs
-    );
-    
-    if (usage + estimatedTokens > tokenLimit.maxTokens) {
-      throw new Error('Token limit exceeded for this time period');
-    }
-  }
-}
-```
-
-### 8. Tenant AI Settings
-
-The Tenant AI Settings manage tenant-specific configurations for AI operations, including model preferences and prompt templates:
+The Tenant AI Settings enable fine-grained configuration:
 
 ```typescript
 class TenantAISettings {
@@ -625,216 +319,368 @@ class TenantAISettings {
 }
 ```
 
-### 9. AI Command Tests
+This component provides several strategic advantages:
 
-The AI Command Tests ensure the correct functionality of AI commands, including context handling and tenant-specific behavior:
+1. **Tenant-Specific Models**: Organizations can select different AI models based on their needs and budget
+2. **Custom Prompting**: Templates can be customized per tenant for different writing styles, terminology, or brand voice
+3. **Fallback Hierarchy**: The multi-level fallback ensures robust operation even if tenant settings are incomplete
+
+## Implementation Strategy
+
+When implementing this architecture, organizations should consider these strategic approaches:
+
+### 1. Phased Implementation
+
+Rather than attempting to implement all AI commands at once, adopt a phased approach:
+
+1. **Foundation Phase**: Implement the core infrastructure (AI Command Registry, Context Provider, AI Service)
+2. **Basic Commands Phase**: Implement simple AI commands like text completion and rewriting
+3. **Advanced Commands Phase**: Add more complex commands like summarization and structural generation
+4. **Optimization Phase**: Add caching, batching, and performance improvements
+
+This approach allows you to validate the architecture early and gather user feedback before investing in more complex capabilities.
+
+### 2. Tenant Isolation Strategy
+
+Ensure strict tenant isolation through multiple layers:
+
+1. **Context Capturing**: Always include tenant ID in context for AI operations
+2. **Command Validation**: Validate tenant authorization before processing AI commands
+3. **Resource Quotas**: Implement tenant-specific limits for AI usage
+4. **Prompt Isolation**: Ensure prompts never include data from other tenants
+5. **Result Filtering**: Apply tenant-specific content filters to AI responses
+
+### 3. Performance Optimization Strategy
+
+Optimize performance with these strategic approaches:
+
+1. **Context Window Management**: Intelligently manage context windows to minimize token usage
+2. **Command Caching**: Cache AI command results for similar requests
+3. **Batched Processing**: Group similar AI commands for efficient processing
+4. **Progressive Enhancement**: Degrade gracefully when AI services are unavailable
+5. **Asynchronous Processing**: Use background processing for non-interactive AI tasks
+
+## AI Command Implementation Patterns
+
+Here are several strategic patterns for implementing specific AI commands:
+
+### Text Completion Command
 
 ```typescript
-describe('AI Command - Complete Text', () => {
-  let aiCommandRegistry: AICommandRegistry;
-  let mockAIService: jest.Mocked<AIService>;
-  let mockContextProvider: jest.Mocked<ContextProvider>;
-  
-  beforeEach(() => {
-    // Set up mocks
-    mockAIService = createMockAIService();
-    mockContextProvider = createMockContextProvider();
+const completeTextHandler: AICommandHandler<CompleteTextCommand, TextCompletedEvent> = 
+  async (command, context, analysis) => {
+    // Use AI analysis to generate appropriate text completion
+    const generatedText = analysis.content;
     
-    // Create registry with mocks
-    aiCommandRegistry = new AICommandRegistry(
-      mockAIService,
-      mockContextProvider,
-      createMockUsageTracker()
-    );
+    // Create a standard insert text command from AI result
+    const insertCommand: InsertTextCommand = {
+      type: 'INSERT_TEXT',
+      documentId: command.documentId,
+      position: command.position,
+      text: generatedText,
+      userId: command.userId
+    };
     
-    // Register command handler
-    aiCommandRegistry.registerAICommand(
-      'COMPLETE_TEXT',
-      completeTextHandler,
-      { validator: () => ({ valid: true }) }
-    );
+    // Execute the standard command
+    const insertResult = await commandRegistry.execute(insertCommand);
     
-    // Setup tenant context
-    setTenantContext('test-tenant');
-  });
-  
-  test('should complete text based on context', async () => {
-    // Arrange
-    const command: CompleteTextCommand = {
-      type: 'COMPLETE_TEXT',
-      documentId: 'doc-1',
-      userId: 'user-1',
-      position: 100,
-      prefixLength: 20,
-      requiresAIAnalysis: true,
-      contextParameters: {
-        position: 100,
-        windowSize: 500
+    // Return event with AI-specific metadata
+    return {
+      ...insertResult,
+      metadata: {
+        ...insertResult.metadata,
+        aiGenerated: true,
+        prompt: command.prompt,
+        modelId: analysis.modelId
       }
     };
+  };
+```
+
+This implementation demonstrates a key architectural principle: AI commands ultimately decompose into standard document operations. This approach:
+
+1. Preserves the event-sourced history with explicit commands
+2. Maintains compatibility with collaborative editing
+3. Adds AI-specific metadata for tracking and auditability
+4. Reuses existing validation and authorization mechanisms
+
+### Rewrite Selection Command
+
+```typescript
+const rewriteSelectionHandler: AICommandHandler<RewriteSelectionCommand, TextReplacedEvent> = 
+  async (command, context, analysis) => {
+    // Use AI to rewrite the selected text
+    const rewrittenText = analysis.content;
     
-    const mockContext = {
-      precedingText: 'This is a test document with',
-      followingText: ' some content after the cursor.',
-      documentStructure: {} as DocumentStructure,
-      activeSectionContent: 'This is a test document with some content after the cursor.',
-      documentMetadata: {}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-});  });    expect(context.followingText).toBe('This is the final paragraph of the document.');    expect(context.precedingText).toBe('This is the second paragraph with some more content.\n\nThis is the third paragraph near the cursor.');    expect(context.tenantContext.tenantId).toBe('test-tenant');        );      'test-tenant'      'doc-1',    expect(mockDocumentRepository.getDocument).toHaveBeenCalledWith(    // Assert        const context = await contextProvider.getContext('doc-1', params);    // Act        };      windowSize: 200      position: 120, // Position in third paragraph    const params: ContextParameters = {        mockDocumentRepository.getDocument.mockResolvedValue(mockDocument);        };      version: 1      metadata: { title: 'Test Document' },        'This is the final paragraph of the document.',        'This is the third paragraph near the cursor.\n\n' +        'This is the second paragraph with some more content.\n\n' +      content: 'This is a test document with multiple paragraphs.\n\n' +       id: 'doc-1',    const mockDocument = {    // Arrange  test('should extract context with proper tenant isolation', async () => {    });    });      userId: 'test-user'      tenantId: 'test-tenant',    mockTenantProvider.getCurrentContext.mockReturnValue({    // Setup tenant context        );      mockTenantProvider      mockDocumentRepository,    contextProvider = new ContextProvider(        mockTenantProvider = createMockTenantProvider();    mockDocumentRepository = createMockDocumentRepository();  beforeEach(() => {    let mockTenantProvider: jest.Mocked<TenantProvider>;  let mockDocumentRepository: jest.Mocked<DocumentRepository>;  let contextProvider: ContextProvider;describe('Context Provider', () => {});  });    });      }        modelId: 'gpt-4'        prompt: undefined,        aiGenerated: true,      metadata: {      newText: ' completed text based on context.',      position: 100,      userId: 'user-1',      documentId: 'doc-1',      type: 'TEXT_COMPLETED',    expect(result).toEqual({    // Assert        const result = await aiCommandRegistry.execute(command);    // Act        mockAIService.analyze.mockResolvedValue(mockAnalysis);        };      modelId: 'gpt-4'      content: ' completed text based on context.',    const mockAnalysis = {        mockContextProvider.getContext.mockResolvedValue(mockContext);        };      tenantContext: { tenantId: 'test-tenant' }
+    // Create a replace text command from AI result
+    const replaceCommand: ReplaceTextCommand = {
+      type: 'REPLACE_TEXT',
+      documentId: command.documentId,
+      startPosition: command.startPosition,
+      endPosition: command.endPosition,
+      newText: rewrittenText,
+      userId: command.userId
     };
     
-    const mockAnalysis = {
-      content: 'amazing AI-generated text',
-      modelId: 'gpt-4',
-      usage: { promptTokens: 50, completionTokens: 10, totalTokens: 60 }
+    // Execute standard command
+    const replaceResult = await commandRegistry.execute(replaceCommand);
+    
+    // Return event with AI-specific metadata
+    return {
+      ...replaceResult,
+      metadata: {
+        ...replaceResult.metadata,
+        aiGenerated: true,
+        instructions: command.instructions,
+        modelId: analysis.modelId
+      }
     };
-    
-    // Mock dependencies
-    mockContextProvider.getContext.mockResolvedValue(mockContext);
-    mockAIService.analyze.mockResolvedValue(mockAnalysis);
-    
+  };
+```
 
+## Performance Considerations
 
+### Context Optimization
 
+Optimize token usage with intelligent context extraction:
 
-
-
-```});  });      .rejects.toThrow('Token limit exceeded');
-    await expect(aiCommandRegistryWithLimits.execute(command))
-    // Act & Assert
-    
-    };      }        windowSize: 1000 // Large context
-
-
-        position: 100,
-      contextParameters: {
-      requiresAIAnalysis: true,      prefixLength: 20,      position: 100,
-      userId: 'user-1',
-      documentId: 'doc-1',
-
-
-
-
-      type: 'COMPLETE_TEXT',
-    const command: CompleteTextCommand = {        );
-      { validator: () => ({ valid: true }) }
-      completeTextHandler,
-      'COMPLETE_TEXT',    aiCommandRegistryWithLimits.registerAICommand(
-    
-    );
-      mockUsageTracker
-      mockContextProvider,
-
-
-      mockAIService,    const aiCommandRegistryWithLimits = new AICommandRegistry(        );    // Act
-    const result = await aiCommandRegistry.execute(command);
-
-
-      new Error('Token limit exceeded')
-    mockUsageTracker.checkAndReserveTokens.mockRejectedValue(
-    const mockUsageTracker = createMockUsageTracker();
-    // Arrange
-  test('should respect tenant token limits', async () => {
+```typescript
+function optimizeContextWindow(
+  document: Document,
+  position: number,
+  requestedSize: number,
+  maxTokens: number
+): string {
+  // Start with the requested window
+  let context = document.getTextWindow(position, requestedSize);
   
+  // Estimate tokens
+  let estimatedTokens = estimateTokens(context);
+  
+  if (estimatedTokens <= maxTokens) {
+    return context;
+  }
+  
+  // If too large, implement intelligent trimming:
+  // 1. Try reducing to semantic boundaries (paragraphs)
+  context = reduceToNearestParagraphBoundaries(context, maxTokens);
+  estimatedTokens = estimateTokens(context);
+  
+  if (estimatedTokens <= maxTokens) {
+    return context;
+  }
+  
+  // 2. Try extracting key sections (headings and their content)
+  context = extractKeyHeadingsAndContent(document, position, maxTokens);
+  estimatedTokens = estimateTokens(context);
+  
+  if (estimatedTokens <= maxTokens) {
+    return context;
+  }
+  
+  // 3. Last resort: truncate with preference to text around cursor
+  return truncateAroundPosition(context, position, maxTokens);
+}
+```
+
+This approach ensures efficient token usage while preserving the most relevant content for context.
+
+### AI Command Caching
+
+Implement caching to reduce redundant AI operations:
+
+```typescript
+class AICommandCache {
+  private cache: Map<string, CachedResult> = new Map();
+  
+  async getOrExecute<T extends AICommand, R>(
+    command: T,
+    executor: () => Promise<R>
+  ): Promise<R> {
+    // Generate cache key from command properties
+    const cacheKey = this.generateCacheKey(command);
+    
+    // Check for cached result
+    const cachedResult = this.cache.get(cacheKey);
+    if (cachedResult && !this.isExpired(cachedResult)) {
+      return cachedResult.result as R;
+    }
+    
+    // Execute command
+    const result = await executor();
+    
+    // Cache result
+    this.cache.set(cacheKey, {
+      result,
+      timestamp: Date.now(),
+      commandType: command.type
+    });
+    
+    return result;
+  }
+}
+```
+
+### Command Batching
+
+Group similar AI commands to reduce API overhead:
+
+```typescript
+class AICommandBatcher {
+  private batches: Map<string, BatchEntry[]> = new Map();
+  private timers: Map<string, NodeJS.Timeout> = new Map();
+  
+  async scheduleCommand<T extends AICommand>(
+    command: T,
+    executor: (commands: T[]) => Promise<any[]>
+  ): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const batchKey = this.getBatchKey(command);
+      
+      // Initialize batch if needed
+      if (!this.batches.has(batchKey)) {
+        this.batches.set(batchKey, []);
+      }
+      
+      // Add to batch
+      const batch = this.batches.get(batchKey)!;
+      batch.push({
+        command,
+        resolve,
+        reject
+      });
+      
+      // Reset timer
+      if (this.timers.has(batchKey)) {
+        clearTimeout(this.timers.get(batchKey)!);
+      }
+      
+      // Set timeout to process batch
+      this.timers.set(
+        batchKey,
+        setTimeout(() => this.processBatch(batchKey, executor), 50)
+      );
+    });
+  }
+}
+```
+
+## Deployment and Scaling Considerations
+
+### Rate Limiting Strategy
+
+Implement a multi-tiered rate limiting approach:
+
+1. **User-level Limits**: Prevent individual users from consuming excessive resources
+2. **Tenant-level Limits**: Ensure fair resource allocation across tenants
+3. **System-level Limits**: Protect the overall system from overload
+4. **Graceful Degradation**: Prioritize interactive commands over background tasks under load
+
+### Monitoring Strategy
+
+Implement comprehensive monitoring to track performance and usage:
+
+1. **Command Success Rate**: Track successful vs. failed AI commands
+2. **Response Time**: Monitor latency for different command types
+3. **Token Usage**: Track token consumption by tenant and command type
+4. **Cache Hit Rate**: Monitor cache effectiveness
+5. **Error Rates**: Track different error types (rate limits, timeouts, etc.)
+
+### Cost Management Strategy
+
+Control AI costs with these approaches:
+
+1. **Token Budgeting**: Allocate token budgets by tenant and time period
+2. **Context Optimization**: Intelligently minimize context size without sacrificing quality
+3. **Model Selection**: Use less expensive models for simpler tasks
+4. **Batch Processing**: Combine similar requests to reduce API calls
+5. **Caching Strategy**: Cache results for frequently requested operations
+
+## Testing Strategy
+
+Implement these testing strategies for AI commands:
+
+1. **Unit Tests**: Test individual command handlers with mocked AI responses
+2. **Integration Tests**: Verify the flow from command to event
+3. **Context Extraction Tests**: Verify proper context extraction with tenant isolation
+4. **Performance Tests**: Measure token usage and response times
+5. **Tenant Isolation Tests**: Verify that tenant boundaries are maintained
+
+Example test for context extraction:
+
+```typescript
+test('should extract context with proper tenant isolation', async () => {
+  // Arrange
+  const mockDocument = {
+    id: 'doc-1',
+    content: 'This is a test document with multiple paragraphs.\n\n' +
+      'This is the second paragraph with some more content.\n\n' +
+      'This is the third paragraph near the cursor.\n\n' +
+      'This is the final paragraph of the document.',
+    metadata: { title: 'Test Document' },
+    version: 1
+  };
+  
+  mockDocumentRepository.getDocument.mockResolvedValue(mockDocument);
+  
+  const params: ContextParameters = {
+    position: 120, // Position in third paragraph
+    windowSize: 200
+  };
+  
+  // Set tenant context
+  mockTenantProvider.getCurrentContext.mockReturnValue({
+    tenantId: 'test-tenant',
+    userId: 'test-user'
   });
-    }));
-      })
-        modelId: 'gpt-4'        aiGenerated: true,
-      metadata: expect.objectContaining({
-      text: 'amazing AI-generated text',
-      documentId: 'doc-1',
-    expect(result.event).toEqual(expect.objectContaining({
-    
-    );
-      expect.any(Object)
-      mockContext,    
-    // Assert
-    expect(mockContextProvider.getContext).toHaveBeenCalledWith(
-      'doc-1',
-      command.contextParameters
-    );
-    
-    expect(mockAIService.analyze).toHaveBeenCalledWith(
+  
+  // Act
+  const context = await contextProvider.getContext('doc-1', params);
+  
+  // Assert
+  expect(mockDocumentRepository.getDocument).toHaveBeenCalledWith(
+    'doc-1',
+    'test-tenant'
+  );
+  
+  expect(context.tenantContext.tenantId).toBe('test-tenant');
+  expect(context.precedingText).toBe('This is the second paragraph with some more content.\n\nThis is the third paragraph near the cursor.');
+  expect(context.followingText).toBe('This is the final paragraph of the document.');
+});
+```
+
+## Security Considerations
+
+### Prompt Injection Prevention
+
+Implement these strategies to prevent prompt injection attacks:
+
+1. **Input Sanitization**: Validate and sanitize user input before including in prompts
+2. **Context Boundaries**: Use clear context boundaries in prompts
+3. **Response Filtering**: Apply content filters to AI responses
+4. **Model Guardrails**: Use models with built-in guardrails against prompt injection
+5. **Least Privilege**: Limit the capabilities of AI commands to reduce attack surface
+
+### Data Privacy Protection
+
+Ensure data privacy with these approaches:
+
+1. **Tenant Isolation**: Maintain strict tenant boundaries in all operations
+2. **Minimal Context**: Only include necessary information in prompts
+3. **Sensitive Data Detection**: Scan for and remove sensitive data before sending to AI providers
+4. **Compliance Logging**: Maintain comprehensive logs of all AI operations
+5. **Data Retention Policies**: Implement appropriate data retention for AI interactions
+
+## Conclusion
+
+The AI Command Implementation architecture provides a strategic approach to integrating AI capabilities into document editing workflows while maintaining security, performance, and auditability. By extending the command pattern to include AI operations, this architecture ensures that AI features benefit from the same robust validation, authorization, and execution infrastructure as standard user operations.
+
+Organizations implementing this architecture will benefit from:
+
+1. **Seamless AI Integration**: AI capabilities integrate naturally into the editing experience
+2. **Enterprise-Grade Security**: Tenant isolation and security boundaries are maintained
+3. **Cost Optimization**: Intelligent context management reduces token usage
+4. **Performance Resilience**: Circuit breakers and fallbacks ensure system stability
+5. **Extensibility**: New AI capabilities can be added through the consistent command pattern
+
+This architecture provides a solid foundation for building sophisticated AI-powered document editing experiences that meet enterprise requirements for security, compliance, and performance.
