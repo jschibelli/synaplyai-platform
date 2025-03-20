@@ -1,6 +1,7 @@
 import { AICommand, AIAnalysisResult } from './AICommandRegistry';
 import { ContextProvider, DocumentContext } from './ContextProvider'; // Import DocumentContext from ContextProvider
 import { CommandRegistry } from '../commands/CommandRegistry';
+import { InsertTextCommand, ReplaceTextCommand, SummarizeSelectionCommand, ImproveWritingCommand } from '../commands/CommandTypes'; // Import missing command types
 
 // Text styling criteria interface
 export interface StyleCriteria {
@@ -15,6 +16,11 @@ export interface CompleteTextCommand extends AICommand {
   prefixLength: number;
   prompt?: string;
   styleCriteria?: StyleCriteria;
+  contextParameters?: {
+    windowSize: number;
+    includePreceding: boolean;
+    includeFollowing: boolean;
+  };
 }
 
 export interface RewriteSelectionCommand extends AICommand {

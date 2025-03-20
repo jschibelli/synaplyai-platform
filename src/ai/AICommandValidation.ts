@@ -1,9 +1,11 @@
 import { 
   CompleteTextCommand, 
-  RewriteSelectionCommand,
-  SummarizeSelectionCommand,
-  ImproveWritingCommand 
+  RewriteSelectionCommand
 } from './AICommandHandlers';
+import {
+  SummarizeSelectionCommand,
+  ImproveWritingCommand
+} from '../commands/CommandTypes';
 
 // Validation result interface
 export interface ValidationResult {
@@ -47,10 +49,6 @@ export function validateRewriteSelectionCommand(command: RewriteSelectionCommand
   
   if (command.endPosition <= command.startPosition) {
     errors.push('End position must be greater than start position');
-  }
-  
-  if (!command.originalText || command.originalText.length === 0) {
-    errors.push('Original text is required and cannot be empty');
   }
   
   return {
@@ -106,16 +104,18 @@ export function validateImproveWritingCommand(command: ImproveWritingCommand): V
     errors.push('End position must be greater than start position');
   }
   
-  if (!command.originalText || command.originalText.length === 0) {
-    errors.push('Original text is required and cannot be empty');
-  }
-  
   if (!command.aspects || command.aspects.length === 0) {
     errors.push('At least one improvement aspect must be specified');
   }
   
-  if (command.intensity !== undefined && (command.intensity < 1 || command.intensity > 10)) {
-    errors.push('Intensity must be between 1 and 10');
+  if (command.intensity !== undefined) {
+    const intensityValue = typeof command.intensity === 'string' 
+      ? parseInt(command.intensity, 10) 
+      : command.intensity;
+      
+    if (isNaN(intensityValue) || intensityValue < 1 || intensityValue > 10) {
+      errors.push('Intensity must be between 1 and 10');
+    }
   }
   
   return {
