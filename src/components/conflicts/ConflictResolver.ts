@@ -1,9 +1,9 @@
-import { getTenantContext } from '../lib/tenant-context';
-import { ComplianceLogger } from '../compliance/logger';
-import { MetricsCollector } from '../metrics/collector';
-import { BaseEvent, EventStore } from '../events/EventStore';
-import { DocumentCommand, InsertTextCommand, DeleteTextCommand, FormatTextCommand } from '../commands/CommandRegistry';
-import { HybridLogicalClock } from '../transactions/TransactionManager';
+import { getTenantContext } from '../../lib/tenant-context';
+import { ComplianceLogger } from '../../compliance/logger';
+import { MetricsCollector } from '../../metrics/collector';
+import { BaseEvent, EventStore } from '../../events/EventStore';
+import { DocumentCommand, InsertTextCommand, DeleteTextCommand, FormatTextCommand } from '../../commands/CommandRegistry';
+import { HybridLogicalClock } from '../../transactions/TransactionManager';
 
 /**
  * Result of a conflict resolution operation

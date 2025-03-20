@@ -1,0 +1,139 @@
+.conflict-panel {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin: 16px 0;
+  background-color: white;
+  overflow: hidden;
+  max-width: 800px;
+  width: 100%;
+}
+
+.conflict-header, .suggestions-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.conflict-icon, .suggestions-icon {
+  margin-right: 8px;
+  font-size: 18px;
+}
+
+.conflict-title, .suggestions-title {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.conflict-content, .suggestions-list {
+  padding: 16px;
+}
+
+.conflict-actions, .suggestion-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.related-suggestions {
+  border-top: 1px solid #e0e0e0;
+  margin-top: 8px;
+}
+
+.suggestion-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+
+/* Token styling as per your design spec */
+.token {
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.token:hover {
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+}
+
+.token:focus {
+  outline: 2px solid #007bff;
+}
+
+.token-accepted {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.token-rejected {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.token-conflicted {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+/* Button styling */
+button {
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+}
+
+.btn-merge {
+  background-color: #007bff;
+  color: white;
+}
+
+.btn-keep-local {
+  background-color: #6c757d;
+  color: white;
+}
+
+.btn-discard {
+  background-color: white;
+  border-color: #dc3545;
+  color: #dc3545;
+}
+
+.btn-accept {
+  background-color: transparent;
+  color: #28a745;
+}
+
+.btn-reject {
+  background-color: transparent;
+  color: #dc3545;
+}
+
+/* Diff view styling */
+.diff-view {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.diff-header {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.diff-content {
+  word-break: break-word;
+  line-height: 1.5;
+}
