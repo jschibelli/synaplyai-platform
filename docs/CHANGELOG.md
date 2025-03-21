@@ -6,6 +6,21 @@ All notable changes to this project will be documented in this file.
 - Custom AI command implementation
 - Integration of collaborative editing with AI assistance
 
+### Added
+- Complete conflict panel implementation with token-level state visualization
+- Diff view for visualizing conflicts between local and remote content
+- Integrated conflict resolution with vector clock synchronization
+- Real-time conflict detection and notification system
+- Token-level state management with accessibility features
+
+### Fixed
+- Fixed type errors in AI command interfaces and validation
+- Resolved interface inconsistencies between CommandTypes and AICommandHandlers
+- Fixed metrics collection in CommandAggregator to use correct method signatures
+- Corrected validation logic for AI commands to match interface definitions
+- Resolved build errors in AICommandRegistry implementation
+- Fixed type mismatch in intensity validation for ImproveWritingCommand
+
 ## [0.6.0] - 2025-03-17
 
 ### Added

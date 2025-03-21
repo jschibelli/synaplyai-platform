@@ -5,8 +5,8 @@
   margin: 16px 0;
   background-color: white;
   overflow: hidden;
-  max-width: 800px;
   width: 100%;
+  max-width: 800px;
 }
 
 .conflict-header, .suggestions-header {
@@ -58,12 +58,13 @@
 .token {
   padding: 2px 4px;
   border-radius: 4px;
-  transition: background-color 0.2s ease;
+  margin: 0 1px;
+  transition: all 0.2s ease;
+  cursor: pointer;
 }
 
 .token:hover {
   box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
-  cursor: pointer;
 }
 
 .token:focus {
@@ -100,15 +101,28 @@ button {
   color: white;
 }
 
+.btn-merge:hover {
+  background-color: #0069d9;
+}
+
 .btn-keep-local {
   background-color: #6c757d;
   color: white;
+}
+
+.btn-keep-local:hover {
+  background-color: #5a6268;
 }
 
 .btn-discard {
   background-color: white;
   border-color: #dc3545;
   color: #dc3545;
+}
+
+.btn-discard:hover {
+  background-color: #dc3545;
+  color: white;
 }
 
 .btn-accept {
@@ -136,4 +150,20 @@ button {
 .diff-content {
   word-break: break-word;
   line-height: 1.5;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 12px;
+  background-color: #fafafa;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
