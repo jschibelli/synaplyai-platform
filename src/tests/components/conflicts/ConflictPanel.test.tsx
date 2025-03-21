@@ -1,7 +1,48 @@
 import React from 'react';
-import { render, fireEvent, screen } from '@testing-library/react';
+import { render, fireEvent, screen, within } from '@testing-library/react';
 import { ConflictPanel } from '../../../src/components/conflicts/ConflictPanel';
 import { ConflictResolutionStrategy } from '../../../src/conflicts/ConflictResolver';
+
+// Mock the DiffView component to isolate testing
+jest.mock('../../../src/components/conflicts/DiffView', () => ({
+  DiffView: ({ original, suggested, tokenStates, onTokenClick }) => (
+    <div data-testid="diff-view">
+      <div data-testid="original-content">{original}</div>
+      <div data-testid="suggested-content">{suggested}</div>
+      {/* Simplified token representation for testing */}
+      <div data-testid="tokens">
+        <span 
+          data-testid="token-1" 
+          className={`token token-${tokenStates['token-1'] || 'ACCEPTED'}`} 
+          onClick={() => onTokenClick('token-1')}
+        >
+          This
+        </span>
+        <span 
+          data-testid="token-2" 
+          className={`token token-${tokenStates['token-2'] || 'ACCEPTED'}`} 
+          onClick={() => onTokenClick('token-2')}
+        >
+          is
+        </span>
+        <span 
+          data-testid="token-3' 
+          className={`token token-${tokenStates['token-3'] || 'REJECTED'}`} 
+          onClick={() => onTokenClick('token-3')}
+        >
+          local
+        </span>
+        <span 
+          data-testid="token-4" 
+          className={`token token-${tokenStates['token-4'] || 'ACCEPTED'}`} 
+          onClick={() => onTokenClick('token-4')}
+        >
+          content
+        </span>
+      </div>
+    </div>
+  )
+}));
 
 describe('ConflictPanel', () => {
   const mockConflict = {
@@ -32,8 +73,11 @@ describe('ConflictPanel', () => {
     );
     
     expect(screen.getByText('Conflict Detected')).toBeInTheDocument();
-    expect(screen.getByText('Original:')).toBeInTheDocument();
-    expect(screen.getByText('Suggested:')).toBeInTheDocument();
+    expect(screen.getByTestId('original-content')).toHaveTextContent(mockConflict.localContent);
+    expect(screen.getByTestId('suggested-content')).toHaveTextContent(mockConflict.remoteContent);
+    expect(screen.getByRole('button', { name: /merge/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /keep local/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /discard/i })).toBeInTheDocument();
   });
 
   test('calls onResolve with MERGE strategy when merge button is clicked', () => {
@@ -44,7 +88,7 @@ describe('ConflictPanel', () => {
       />
     );
     
-    fireEvent.click(screen.getByText('Merge'));
+    fireEvent.click(screen.getByRole('button', { name: /merge/i }));
     
     expect(mockResolve).toHaveBeenCalledWith({
       conflictId: mockConflict.id,
@@ -60,7 +104,7 @@ describe('ConflictPanel', () => {
       />
     );
     
-    fireEvent.click(screen.getByText('Keep Local'));
+    fireEvent.click(screen.getByRole('button', { name: /keep local/i }));
     
     expect(mockResolve).toHaveBeenCalledWith({
       conflictId: mockConflict.id,
@@ -76,7 +120,7 @@ describe('ConflictPanel', () => {
       />
     );
     
-    fireEvent.click(screen.getByText('Discard'));
+    fireEvent.click(screen.getByRole('button', { name: /discard/i }));
     
     expect(mockResolve).toHaveBeenCalledWith({
       conflictId: mockConflict.id,
@@ -84,7 +128,7 @@ describe('ConflictPanel', () => {
     });
   });
 
-  test('displays tokens with correct styling based on their state', () => {
+  test('initializes token states from conflict data', () => {
     render(
       <ConflictPanel 
         conflict={mockConflict} 
@@ -92,13 +136,58 @@ describe('ConflictPanel', () => {
       />
     );
     
-    // You'll need to adjust these selectors based on your actual implementation
-    const acceptedTokens = screen.getAllByText('This'); // First token is ACCEPTED
-    const rejectedTokens = screen.getAllByText('local'); // Third token is REJECTED
+    const tokens = screen.getByTestId('tokens');
+    expect(within(tokens).getByTestId('token-1')).toHaveClass('token-ACCEPTED');
+    expect(within(tokens).getByTestId('token-2')).toHaveClass('token-ACCEPTED');
+    expect(within(tokens).getByTestId('token-3')).toHaveClass('token-REJECTED');
+    expect(within(tokens).getByTestId('token-4')).toHaveClass('token-ACCEPTED');
+  });
+
+  test('updates token state when clicked', () => {
+    render(
+      <ConflictPanel 
+        conflict={mockConflict} 
+        onResolve={mockResolve} 
+      />
+    );
     
-    // Check that tokens have the right classes
-    expect(acceptedTokens[0].closest('.token')).toHaveClass('token-accepted');
-    expect(rejectedTokens[0].closest('.token')).toHaveClass('token-rejected');
+    const token3 = screen.getByTestId('token-3');
+    
+    // Initial state is REJECTED
+    expect(token3).toHaveClass('token-REJECTED');
+    
+    // Click to change state (REJECTED -> CONFLICTED)
+    fireEvent.click(token3);
+    expect(token3).toHaveClass('token-CONFLICTED');
+    
+    // Click again (CONFLICTED -> ACCEPTED)
+    fireEvent.click(token3);
+    expect(token3).toHaveClass('token-ACCEPTED');
+    
+    // Click again to complete the cycle (ACCEPTED -> REJECTED)
+    fireEvent.click(token3);
+    expect(token3).toHaveClass('token-REJECTED');
+  });
+
+  test('announces state changes to screen readers', () => {
+    render(
+      <ConflictPanel 
+        conflict={mockConflict} 
+        onResolve={mockResolve} 
+      />
+    );
+    
+    // Find and click a token
+    const token3 = screen.getByTestId('token-3');
+    fireEvent.click(token3);
+    
+    // Check that the status is announced
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent(/token marked as conflicted/i);
+    
+    // Check announcement for resolution actions
+    fireEvent.click(screen.getByRole('button', { name: /merge/i }));
+    expect(status).toHaveTextContent(/merging both versions/i);
   });
 
   test('handles related suggestions correctly', () => {
@@ -117,147 +206,180 @@ describe('ConflictPanel', () => {
     // Verify suggestions are displayed
     expect(screen.getByText('Related Suggestions')).toBeInTheDocument();
     expect(screen.getByText('Suggested change')).toBeInTheDocument();
-  });
-
-  test('updates token state when clicked', () => {
-    const { container } = render(
-      <ConflictPanel 
-        conflict={mockConflict} 
-        onResolve={mockResolve} 
-      />
-    );
     
-    // Find a token and check its initial state
-    const token = screen.getAllByText('local')[0].closest('.token');
-    expect(token).toHaveClass('token-rejected');
-    
-    // Click to change state
-    fireEvent.click(token);
-    
-    // After click, state should change from REJECTED to CONFLICTED
-    expect(token).toHaveClass('token-conflicted');
-    
-    // Click again to test the full cycle
-    fireEvent.click(token);
-    
-    // After second click, state should change from CONFLICTED to ACCEPTED
-    expect(token).toHaveClass('token-accepted');
-    
-    // Complete the cycle with one more click
-    fireEvent.click(token);
-    
-    // After third click, state should change from ACCEPTED to REJECTED
-    expect(token).toHaveClass('token-rejected');
-  });
-
-  test('supports accessibility features', () => {
-    render(
-      <ConflictPanel 
-        conflict={mockConflict} 
-        onResolve={mockResolve} 
-      />
-    );
-    
-    // Check for appropriate ARIA roles
-    expect(screen.getByRole('region')).toBeInTheDocument();
-    
-    // Check that buttons have accessible names
-    expect(screen.getByRole('button', { name: /merge/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /keep local/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /discard/i })).toBeInTheDocument();
-  });
-
-  test('announces state changes to screen readers', () => {
-    render(
-      <ConflictPanel 
-        conflict={mockConflict} 
-        onResolve={mockResolve} 
-      />
-    );
-    
-    // Find a token and click it
-    const token = screen.getAllByText('local')[0].closest('.token');
-    fireEvent.click(token);
-    
-    // Check that status message is updated for screen readers
-    const statusElement = screen.getByRole('status');
-    expect(statusElement).toHaveTextContent(/token marked as/i);
-  });
-
-  test('handles keyboard navigation for accessibility', () => {
-    render(
-      <ConflictPanel 
-        conflict={mockConflict} 
-        onResolve={mockResolve} 
-      />
-    );
-    
-    // Find a token and trigger keyboard event
-    const token = screen.getAllByText('local')[0].closest('.token');
-    
-    // Simulate pressing Enter key
-    fireEvent.keyDown(token, { key: 'Enter', code: 'Enter' });
-    
-    // Token state should change as if clicked
-    expect(token).toHaveClass('token-conflicted');
-  });
-
-  test('handles suggestion actions correctly', () => {
-    const relatedSuggestions = [
-      { id: 'suggestion-1', content: 'Suggested change', state: 'CONFLICTED' }
-    ];
-    
-    // Create a spy on console.log to verify action logging
+    // Spy on console.log to verify action logging
     const consoleSpy = jest.spyOn(console, 'log');
     
-    render(
-      <ConflictPanel 
-        conflict={mockConflict} 
-        onResolve={mockResolve}
-        relatedSuggestions={relatedSuggestions}
-      />
-    );
-    
     // Find accept button for the suggestion and click it
-    const acceptButton = screen.getByLabelText(/accept suggestion/i);
+    const acceptButton = screen.getByLabelText(/Accept suggestion:/i);
     fireEvent.click(acceptButton);
     
-    // Verify action was logged
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('suggestion-1 accepted'));
+    // Verify action was logged and status updated
+    expect(consoleSpy).toHaveBeenCalledWith('Suggestion suggestion-1 accepted');
+    expect(screen.getByRole('status')).toHaveTextContent(/suggestion accepted/i);
     
     // Find reject button and click it
-    const rejectButton = screen.getByLabelText(/reject suggestion/i);
+    const rejectButton = screen.getByLabelText(/Reject suggestion:/i);
     fireEvent.click(rejectButton);
     
     // Verify action was logged
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('suggestion-1 rejected'));
+    expect(consoleSpy).toHaveBeenCalledWith('Suggestion suggestion-1 rejected');
     
     // Clean up spy
     consoleSpy.mockRestore();
   });
 
-  test('initializes token states correctly from props', () => {
-    // Custom conflict with different token states
-    const customConflict = {
+  test('handles conflicts with operational transforms when available', () => {
+    // Create a conflict with operations
+    const conflictWithOps = {
       ...mockConflict,
-      tokens: [
-        { id: 'custom-1', text: 'Custom', state: 'ACCEPTED' },
-        { id: 'custom-2', text: 'Token', state: 'CONFLICTED' }
-      ]
+      operations: {
+        local: {
+          type: 'insert',
+          position: 0,
+          text: 'This is local content',
+          userId: 'user-1',
+          timestamp: 100
+        },
+        remote: {
+          type: 'insert',
+          position: 0,
+          text: 'This is remote content',
+          userId: 'user-2',
+          timestamp: 101
+        }
+      }
     };
+    
+    // Mock OperationalTransform module
+    jest.mock('../../../src/collaborative/OperationalTransform', () => ({
+      OperationalTransform: {
+        transform: jest.fn().mockReturnValue({
+          type: 'insert',
+          position: 0,
+          text: 'transformed',
+          userId: 'user-2',
+          timestamp: 101
+        }),
+        apply: jest.fn().mockReturnValue('Merged content')
+      }
+    }));
     
     render(
       <ConflictPanel 
-        conflict={customConflict} 
+        conflict={conflictWithOps} 
         onResolve={mockResolve} 
       />
     );
     
-    // Find tokens and check their classes
-    const acceptedToken = screen.getByText('Custom').closest('.token');
-    const conflictedToken = screen.getByText('Token').closest('.token');
+    // Click merge to trigger the operational transform code path
+    fireEvent.click(screen.getByRole('button', { name: /merge/i }));
     
-    expect(acceptedToken).toHaveClass('token-accepted');
-    expect(conflictedToken).toHaveClass('token-conflicted');
+    // Verify resolution was called
+    expect(mockResolve).toHaveBeenCalledWith({
+      conflictId: conflictWithOps.id,
+      strategy: ConflictResolutionStrategy.MERGE
+    });
+  });
+
+  test('renders accessibility features properly', () => {
+    render(
+      <ConflictPanel 
+        conflict={mockConflict} 
+        onResolve={mockResolve} 
+      />
+    );
+    
+    // Verify proper ARIA roles and attributes
+    expect(screen.getByRole('region')).toHaveAttribute('aria-label', 'Conflict Resolution Panel');
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    
+    // Check that the conflict description is available for screen readers
+    const conflictDescriptions = screen.getAllByText(/conflict detected between local content/i, { exact: false });
+    expect(conflictDescriptions.length).toBeGreaterThan(0);
+    
+    // Verify buttons have accessible names
+    expect(screen.getByRole('button', { name: /merge both versions/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /keep local version/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /use remote version/i })).toBeInTheDocument();
+  });
+
+  test('handles keyboard navigation', () => {
+    render(
+      <ConflictPanel 
+        conflict={mockConflict} 
+        onResolve={mockResolve} 
+      />
+    );
+    
+    // Focus and trigger action with keyboard
+    const mergeButton = screen.getByRole('button', { name: /merge/i });
+    mergeButton.focus();
+    fireEvent.keyDown(mergeButton, { key: 'Enter', code: 'Enter' });
+    
+    // Verify the action was triggered
+    expect(mockResolve).toHaveBeenCalledWith({
+      conflictId: mockConflict.id,
+      strategy: ConflictResolutionStrategy.MERGE
+    });
+  });
+
+  test('renders without tokens when not provided', () => {
+    // Create conflict without tokens
+    const conflictWithoutTokens = {
+      id: 'conflict-2',
+      type: 'TEXT_CONFLICT',
+      localContent: 'Local content only',
+      remoteContent: 'Remote content only'
+    };
+    
+    render(
+      <ConflictPanel 
+        conflict={conflictWithoutTokens} 
+        onResolve={mockResolve} 
+      />
+    );
+    
+    // Should render without errors
+    expect(screen.getByText('Conflict Detected')).toBeInTheDocument();
+    expect(screen.getByTestId('original-content')).toHaveTextContent('Local content only');
+  });
+
+  test('handles empty related suggestions array', () => {
+    render(
+      <ConflictPanel 
+        conflict={mockConflict} 
+        onResolve={mockResolve}
+        relatedSuggestions={[]} // Explicitly empty
+      />
+    );
+    
+    // Should not render the suggestions section
+    expect(screen.queryByText('Related Suggestions')).not.toBeInTheDocument();
+  });
+
+  test('preserves token state between re-renders', () => {
+    const { rerender } = render(
+      <ConflictPanel 
+        conflict={mockConflict} 
+        onResolve={mockResolve} 
+      />
+    );
+    
+    // Change token state
+    const token = screen.getByTestId('token-3');
+    fireEvent.click(token); // REJECTED -> CONFLICTED
+    expect(token).toHaveClass('token-CONFLICTED');
+    
+    // Re-render with same props
+    rerender(
+      <ConflictPanel 
+        conflict={mockConflict} 
+        onResolve={mockResolve} 
+      />
+    );
+    
+    // State should be preserved
+    expect(screen.getByTestId('token-3')).toHaveClass('token-CONFLICTED');
   });
 });

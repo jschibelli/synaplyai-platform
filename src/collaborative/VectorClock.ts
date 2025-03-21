@@ -1,6 +1,12 @@
+/**
+ * Vector Clock implementation for causality tracking in collaborative editing
+ */
 export class VectorClock {
   private clock: Record<string, number>;
   
+  /**
+   * Create a new vector clock, optionally initializing for a user
+   */
   constructor(
     userId?: string,
     initialClock?: Record<string, number>
@@ -29,9 +35,9 @@ export class VectorClock {
    * Compare this clock with another vector clock
    * @returns -1 if this happens before other, 1 if this happens after other, 0 if concurrent
    */
-  compare(other: VectorClock): -1 | 0 | 1 {
+  compare(other: VectorClock | Record<string, number>): -1 | 0 | 1 {
     const thisClock = this.clock;
-    const otherClock = other.getClock();
+    const otherClock = other instanceof VectorClock ? other.getClock() : other;
     
     let thisGreater = false;
     let otherGreater = false;
@@ -74,5 +80,28 @@ export class VectorClock {
     for (const userId in otherClock) {
       this.clock[userId] = Math.max(this.clock[userId] || 0, otherClock[userId] || 0);
     }
+  }
+  
+  /**
+   * Check if this clock is identical to another clock
+   */
+  equals(other: VectorClock | Record<string, number>): boolean {
+    const otherClock = other instanceof VectorClock ? other.getClock() : other;
+    
+    // Check if all keys in this clock match the other clock
+    for (const userId in this.clock) {
+      if ((this.clock[userId] || 0) !== (otherClock[userId] || 0)) {
+        return false;
+      }
+    }
+    
+    // Check if all keys in other clock match this clock
+    for (const userId in otherClock) {
+      if ((otherClock[userId] || 0) !== (this.clock[userId] || 0)) {
+        return false;
+      }
+    }
+    
+    return true;
   }
 }

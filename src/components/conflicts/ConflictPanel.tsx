@@ -3,6 +3,7 @@ import { ConflictResolutionStrategy, ConflictType } from '../../conflicts/Confli
 import { Token } from './Token';
 import { DiffView } from './DiffView';
 import './ConflictPanel.css';
+import { OperationalTransform, Operation } from '../../collaborative/OperationalTransform';
 
 interface ConflictPanelProps {
   conflict: {
@@ -98,6 +99,48 @@ export const ConflictPanel: React.FC<ConflictPanelProps> = ({
     // Create a descriptive message about the conflict for screen readers
     return `Conflict detected between local content "${conflict.localContent.substring(0, 30)}${conflict.localContent.length > 30 ? '...' : ''}" 
             and remote content "${conflict.remoteContent.substring(0, 30)}${conflict.remoteContent.length > 30 ? '...' : ''}"`;
+  };
+
+  const applyTokenStateToContent = (conflict: Conflict, tokenState: Record<string, string>): string => {
+    // If we have operations, use them for precise merging
+    if (conflict.operations) {
+      let baseContent = conflict.localContent;
+      
+      // Find tokens marked as accepted from remote content
+      const acceptedRemoteTokens = conflict.tokens
+        ?.filter(token => tokenState[token.id] === 'ACCEPTED' && token.id.startsWith('remote-'))
+        .map(token => token.id);
+        
+      if (acceptedRemoteTokens?.length) {
+        // For each accepted remote token, apply its operation
+        // This is a simplified approach - a real implementation would be more complex
+        // to handle operation dependencies
+        const remoteOp = conflict.operations.remote;
+        
+        // Apply transformed remote operation
+        const transformedOp = OperationalTransform.transform(remoteOp, conflict.operations.local);
+        baseContent = OperationalTransform.apply(baseContent, transformedOp);
+      }
+      
+      return baseContent;
+    }
+    
+    // Fallback to simpler text-based approach
+    // This is a simplified implementation - a real one would use the token positions
+    let mergedContent = '';
+    let localContent = conflict.localContent;
+    let remoteContent = conflict.remoteContent;
+    
+    // Simple approach: use token state to decide which content to keep
+    conflict.tokens?.forEach(token => {
+      const state = tokenState[token.id] || token.state;
+      
+      if (state === 'ACCEPTED') {
+        mergedContent += token.text;
+      }
+    });
+    
+    return mergedContent || conflict.localContent; // Fallback to local if merge fails
   };
 
   return (
