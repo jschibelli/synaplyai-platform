@@ -1,18 +1,22 @@
-# Conflict Resolution Strategy for Collaborative Editing Systems
-
-This document provides a comprehensive architectural overview of conflict resolution strategies for collaborative editing environments, with a focus on the implementation for the SynaplyAI platform.
+# SynaplyAI Conflict Resolution System
 
 ## Overview
 
-When building collaborative editing systems, handling concurrent edits from multiple users becomes a critical architectural challenge. The conflict resolution system described here establishes a principled approach based on formal distributed systems concepts, ensuring data consistency while preserving user intent.
+The SynaplyAI conflict resolution system provides a robust framework for handling concurrent edits in a collaborative editing environment. Using a combination of vector clocks and operational transforms, the system can detect and resolve conflicts while preserving user intent.
 
-### Strategic Benefits
+## Key Components
 
-1. **Deterministic Resolution**: The vector clock-based approach creates predictable, consistent outcomes across all clients
-2. **Intent Preservation**: The type-specific resolution strategies maintain user intent rather than applying simplistic "last write wins" logic
-3. **Performance Optimization**: Early detection and selective resolution minimize computational overhead
-4. **Tenant Isolation**: The architecture maintains strict multi-tenant boundaries, even during conflict resolution
-5. **Auditability**: The system creates a complete audit trail of conflict detection and resolution decisions
+### 1. Vector Clock Synchronization
+
+Vector clocks track causal relationships between operations, enabling the system to determine if operations can be automatically merged or require user intervention.
+
+```typescript
+// Example vector clock implementation
+const clockA = { 'user-1': 3, 'user-2': 2 };
+const clockB = { 'user-1': 2, 'user-2': 4 };
+
+// These clocks indicate concurrent operations that need conflict resolution
+```
 
 ## Core Architectural Concepts
 
