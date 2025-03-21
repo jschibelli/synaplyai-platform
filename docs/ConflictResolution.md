@@ -2,21 +2,24 @@
 
 ## Overview
 
-The SynaplyAI conflict resolution system provides a robust framework for handling concurrent edits in a collaborative editing environment. Using a combination of vector clocks and operational transforms, the system can detect and resolve conflicts while preserving user intent.
+The conflict resolution system provides an intelligent framework for handling concurrent edits in collaborative editing scenarios. It integrates vector clocks for causality tracking with operational transforms for content merging, providing both automatic and manual resolution options.
 
 ## Key Components
 
-### 1. Vector Clock Synchronization
+### 1. Vector Clock Implementation
 
-Vector clocks track causal relationships between operations, enabling the system to determine if operations can be automatically merged or require user intervention.
+Our vector clock system tracks causality between operations, allowing the system to detect when operations are concurrent (vs. sequential):
 
 ```typescript
-// Example vector clock implementation
-const clockA = { 'user-1': 3, 'user-2': 2 };
-const clockB = { 'user-1': 2, 'user-2': 4 };
+// Example vector clock usage
+const clock1 = new VectorClock('user-1');
+const clock2 = new VectorClock('user-2');
+clock1.increment('user-1'); // [user-1: 1]
+clock2.increment('user-2'); // [user-2: 1]
 
-// These clocks indicate concurrent operations that need conflict resolution
-```
+// These clocks represent concurrent operations
+const comparison = clock1.compare(clock2); // Returns 0 (concurrent)
+````
 
 ## Core Architectural Concepts
 
@@ -91,6 +94,14 @@ This component identifies potential conflicts by analyzing vector timestamps and
 async detectConflict(op1: VersionedOperation, op2: VersionedOperation): Promise<ConflictResult> {
   // Implementation details...
 }
+
+const detector = new ConflictDetector();
+const hasConflict = detector.detectConflict(
+  operation1, 
+  operation2,
+  vectorClock1,
+  vectorClock2
+);
 ```
 
 ### Resolution Engine
