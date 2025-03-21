@@ -1,11 +1,14 @@
 /**
- * Vector Clock implementation for causality tracking in collaborative editing
+ * VectorClock implementation for tracking causality between events
+ * in a distributed system like collaborative editing
  */
 export class VectorClock {
   private clock: Record<string, number>;
   
   /**
-   * Create a new vector clock, optionally initializing for a user
+   * Create a new VectorClock
+   * @param userId Optional user ID to initialize clock with
+   * @param initialClock Optional initial clock values
    */
   constructor(
     userId?: string,
@@ -19,6 +22,7 @@ export class VectorClock {
   
   /**
    * Increment the clock value for a user
+   * @param userId The user ID to increment
    */
   increment(userId: string): void {
     this.clock[userId] = (this.clock[userId] || 0) + 1;
@@ -32,7 +36,8 @@ export class VectorClock {
   }
   
   /**
-   * Compare this clock with another vector clock
+   * Compare this vector clock with another to determine causality
+   * @param other The other vector clock or raw clock values
    * @returns -1 if this happens before other, 1 if this happens after other, 0 if concurrent
    */
   compare(other: VectorClock | Record<string, number>): -1 | 0 | 1 {
@@ -61,6 +66,7 @@ export class VectorClock {
       }
     }
     
+    // Determine causality
     if (thisGreater && !otherGreater) {
       return 1; // This happens after other
     } else if (!thisGreater && otherGreater) {
@@ -83,7 +89,8 @@ export class VectorClock {
   }
   
   /**
-   * Check if this clock is identical to another clock
+   * Check if this clock is identical to another
+   * @param other The other vector clock or raw clock values
    */
   equals(other: VectorClock | Record<string, number>): boolean {
     const otherClock = other instanceof VectorClock ? other.getClock() : other;
@@ -105,3 +112,4 @@ export class VectorClock {
     return true;
   }
 }
+
