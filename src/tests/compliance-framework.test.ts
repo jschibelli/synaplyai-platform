@@ -3,7 +3,7 @@ import { ComplianceLogger } from '../compliance/logger';
 import { AdaptiveCircuitBreaker } from '../circuit-breaker/adaptive-breaker';
 import { RedisCircuitBreakerStore } from '../circuit-breaker/redis-store';
 import { CircuitState } from '../circuit-breaker/interfaces';
-import { MetricsCollector } from '../metrics/collector';
+import { MetricsCollector } from '../metrics/metrics-collector';
 import { ShardedRedisClient } from '../metrics/sharded-redis';
 import { EnhancedFilterPipeline, ExecutionStrategy } from '../filtering/filter-pipeline';
 import { mockTenantContext, clearTenantContext } from '../__mocks__/tenant-context';

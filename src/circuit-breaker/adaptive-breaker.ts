@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import { CircuitBreakerOptions, CircuitBreakerStore, CircuitState } from './interfaces';
 import { TenantAwareCircuitBreaker } from './tenant-breaker';
-import { MetricsCollector } from '../metrics/collector';
+import { MetricsCollector } from '../metrics/metrics-collector';
 import { ComplianceLogger } from '../compliance/logger';
 
 export class AdaptiveCircuitBreaker extends TenantAwareCircuitBreaker {

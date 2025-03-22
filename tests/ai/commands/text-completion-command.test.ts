@@ -24,21 +24,21 @@ describe('Text Completion Command', () => {
   // Sample command
   const testCommand: CompleteTextCommand = {
     type: 'COMPLETE_TEXT',
-    documentId: testDocumentId,
-    userId: testUserId,
-    position: 100,
-    prompt: 'Complete with a summary',
+    documentId: 'doc-1',
+    userId: 'user-1',
+    position: 0,
+    prompt: 'Complete this text',
     contextParameters: {
-      windowSize: 500,
+      windowSize: 100,
       includePreceding: true,
       includeFollowing: false
     },
     analysisParameters: {
-      type: 'COMPLETE_TEXT',
       model: 'gpt-4',
       temperature: 0.7,
-      maxTokens: 200
+      maxTokens: 100
     },
+    parameters: {}, // Add required parameters
     requiresAIAnalysis: true
   };
   

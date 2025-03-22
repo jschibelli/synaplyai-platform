@@ -1,6 +1,6 @@
 import { Redis } from 'ioredis';
 import { RedisStore } from './redis-store';
-import { MetricsCollector } from '../metrics/collector';
+import { MetricsCollector } from './metrics-collector';
 import { EventEmitter } from 'events';
 import { createHash } from 'crypto';
 

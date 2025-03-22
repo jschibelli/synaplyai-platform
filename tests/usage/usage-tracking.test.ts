@@ -1,10 +1,15 @@
 import { SubscriptionManager } from '../../src/services/SubscriptionManager';
 import { UsageTracker } from '../../src/services/usage/UsageTracker';
 import { redisMock, createRedisMock } from '../../src/__mocks__/redis.mock';
+import { CircuitBreaker } from '../../../src/circuit-breaker/CircuitBreaker';
 
 describe('Usage Tracking', () => {
   let usageTracker: UsageTracker;
   let subscriptionManager: SubscriptionManager;
+  const circuitBreaker = new CircuitBreaker({
+    failureThreshold: 3,
+    resetTimeout: 30000
+  });
 
   beforeEach(() => {
     // Reset mocks

@@ -1,7 +1,7 @@
 import { AICommandHandler, AICommandContext } from '../../../src/ai/commands/AICommandHandler';
 import { TenantContext } from '../../../src/tenant/TenantContext';
 import { MetricsCollector } from '../../../src/services/metrics/MetricsCollector';
-import { CircuitBreakerStore } from '../../../src/circuit-breaker/redis-store';
+import { RedisCircuitBreakerStore } from '../../../src/circuit-breaker/redis-store';
 import { AIService } from '../../../src/services/ai/AIService';
 import { CircuitBreaker } from '../../../src/circuit-breaker/interfaces';
 

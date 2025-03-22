@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/pages/api/auth/[...nextauth]';
-import { tenantContextStorage, TenantContext } from 'src/lib/tenant-context';
+import { tenantContextStorage, TenantContext } from 'src/lib/tenantContext';
 import { v4 as uuidv4 } from 'uuid';
 
 /**

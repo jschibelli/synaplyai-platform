@@ -1,7 +1,7 @@
 import { AICommandRegistry } from '../../../src/ai/commands/AICommandRegistry';
 import { TenantContext } from '../../../src/tenant/TenantContext';
 import { MetricsCollector } from '../../../src/services/metrics/MetricsCollector';
-import { CircuitBreakerStore } from '../../../src/circuit-breaker/redis-store';
+import { RedisCircuitBreakerStore } from '../../../src/circuit-breaker/redis-store';
 import { CircuitBreaker } from '../../../src/circuit-breaker/interfaces';
 
 describe('AICommandRegistry', () => {
@@ -522,3 +522,13 @@ describe('AICommandRegistry', () => {
     });
   });
 });
+
+const command: AICommandOptions = {
+  type: 'SOME_COMMAND',
+  requiresAIAnalysis: true,
+  executionParameters: {
+    timeout: 1000,
+    retries: 3,
+    priority: 'high'
+  }
+};

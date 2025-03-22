@@ -1,5 +1,5 @@
 import { AICommandContextParameters } from './AICommandRegistry';
-import { getTenantContext } from '../lib/tenant-context';
+import { getTenantContext } from '../lib/tenantContext';
 
 /**
  * Document context structure 

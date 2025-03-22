@@ -1,5 +1,5 @@
 import { Redis } from 'ioredis';
-import { getCurrentTenantId } from '../lib/tenant-context';
+import { getCurrentTenantId } from '../lib/tenantContext';
 
 interface AggregatedMetrics {
   min: number;

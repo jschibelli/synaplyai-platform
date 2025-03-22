@@ -1,5 +1,5 @@
-import { getCurrentTenantContext as getTenantContext } from '../lib/tenant-context';
-import { MetricsCollector } from '../metrics/collector';
+import { getCurrentTenantContext as getTenantContext } from '../lib/tenantContext';
+import { MetricsCollector } from '../metrics/metrics-collector';
 
 /**
  * Range in a document

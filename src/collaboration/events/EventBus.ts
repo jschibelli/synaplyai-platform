@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import { Event } from './EventStore';
-import { getTenantContext } from '../../lib/tenant-context';
-import { MetricsCollector } from '../../metrics/collector';
+import { getTenantContext } from '../../lib/tenantContext';
+import { MetricsCollector } from '../../metrics/metrics-collector';
 
 export interface Subscription {
   unsubscribe(): void;

@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { DocumentId } from '../types';
-import { MetricsCollector } from '../../metrics/collector';
-import { getTenantContext } from '../../lib/tenant-context';
+import { MetricsCollector } from '../../metrics/metrics-collector';
+import { getTenantContext } from '../../lib/tenantContext';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface SnapshotMetadata {

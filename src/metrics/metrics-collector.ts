@@ -1,6 +1,6 @@
 import { CircuitState } from '../circuit-breaker/interfaces';
 import { ContentFilterResult } from '../filtering/interfaces';
-import { getCurrentTenantId } from '../lib/tenant-context';
+import { getCurrentTenantId } from '../lib/tenantContext';
 
 // Define a complete RedisMetricsClient interface that matches your implementation
 interface RedisMetricsClient {

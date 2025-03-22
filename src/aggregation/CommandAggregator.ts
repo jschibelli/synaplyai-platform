@@ -1,7 +1,7 @@
-import { getTenantContext } from '../lib/tenant-context';
+import { getTenantContext } from '../lib/tenantContext';
 import { CommandRegistry, CommandResult, DocumentCommand, InsertTextCommand, DeleteTextCommand, FormatTextCommand } from '../commands/CommandRegistry';
 import { BaseEvent } from '../events/EventStore';
-import { MetricsCollector } from '../metrics/collector';
+import { MetricsCollector } from '../metrics/metrics-collector';
 
 /**
  * Configuration options for the CommandAggregator

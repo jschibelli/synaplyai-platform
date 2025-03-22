@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { Worker } from 'worker_threads';
-import { getTenantContext } from '../lib/tenant-context';
+import { getTenantContext } from '../lib/tenantContext';
 import { ComplianceLogger } from '../compliance/logger';
 import { prisma } from '../prisma/client';
 

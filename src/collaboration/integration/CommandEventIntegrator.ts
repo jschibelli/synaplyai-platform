@@ -2,8 +2,8 @@ import { Command } from '../commands/CommandRegistry';
 import { EventStore } from '../events/EventStore';
 import { TransactionManager, HybridLogicalClock } from '../transactions/TransactionManager';
 import { VectorClock } from '../conflict/VectorClock';
-import { MetricsCollector } from '../../metrics/collector';
-import { getTenantContext } from '../../lib/tenant-context';
+import { MetricsCollector } from '../../metrics/metrics-collector';
+import { getTenantContext } from '../../lib/tenantContext';
 import { v4 as uuidv4 } from 'uuid';
 
 interface CommandContext {

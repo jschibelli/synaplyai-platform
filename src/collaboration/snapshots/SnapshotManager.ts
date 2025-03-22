@@ -1,9 +1,9 @@
-import { MetricsCollector } from '../../metrics/collector';
+import { MetricsCollector } from '../../metrics/metrics-collector';
 import { EventStore } from '../events/EventStore';
 import { SnapshotStore, Snapshot, SnapshotMetadata } from './SnapshotStore';
 import { DocumentId } from '../types';
 import { ComplianceLogger } from '../../compliance/logger';
-import { getTenantContext } from '../../lib/tenant-context';
+import { getTenantContext } from '../../lib/tenantContext';
 
 export interface SnapshotConfig {
   minEventCount: number;

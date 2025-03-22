@@ -1,6 +1,6 @@
-import { MetricsCollector } from '../metrics/collector';
+import { MetricsCollector } from '../metrics/metrics-collector';
 import { ComplianceLogger } from '../compliance/logger';
-import { getTenantContext } from '../lib/tenant-context';
+import { getTenantContext } from '../lib/tenantContext';
 
 export enum ContentFilterResult {
   ALLOWED = 'allowed',
@@ -246,5 +246,12 @@ export class MultiStageFilterPipeline implements ContentFilterPipeline {
         contentSnippet: content.substring(0, 100) + (content.length > 100 ? '...' : '')
       }
     });
+  }
+}
+
+export class EnhancedFilterPipeline {
+  async execute(data: any, strategy: ExecutionStrategy): Promise<any> {
+    // Implement filter pipeline execution logic here
+    return data;
   }
 }

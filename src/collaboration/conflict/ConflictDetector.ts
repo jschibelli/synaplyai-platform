@@ -1,7 +1,7 @@
 import { DocumentEvent } from '../events/types';
 import { VectorClock } from './VectorClock';
 import { ComplianceLogger } from '../../compliance/logger';
-import { MetricsCollector } from '../../metrics/collector';
+import { MetricsCollector } from '../../metrics/metrics-collector';
 
 /**
  * Enum representing the relationship between two operations

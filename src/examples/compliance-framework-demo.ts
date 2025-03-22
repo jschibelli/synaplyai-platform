@@ -3,10 +3,10 @@ import { AdaptiveCircuitBreaker } from '../circuit-breaker/adaptive-breaker';
 import { RedisCircuitBreakerStore } from '../circuit-breaker/redis-store';
 import { CircuitState } from '../circuit-breaker/interfaces';
 import { ComplianceLogger } from '../compliance/logger';
-import { MetricsCollector } from '../metrics/collector';
+import { MetricsCollector } from '../metrics/metrics-collector';
 import { ShardedRedisClient } from '../metrics/sharded-redis';
 import { EnhancedFilterPipeline, ExecutionStrategy } from '../filtering/filter-pipeline';
-import { setTenantContext } from '../lib/tenant-context';
+import { setTenantContext } from '../lib/tenantContext';
 
 // Initialize the mockTenantContext for the demo
 function setupTenantContext(tenantId: string, userId: string): void {

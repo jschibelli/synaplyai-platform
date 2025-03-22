@@ -1,8 +1,8 @@
 import { EventStore, Event } from './events/EventStore';
 import { SnapshotStore, Snapshot } from './snapshots/SnapshotStore';
 import { OperationalTransform } from './conflict/OperationalTransform';
-import { MetricsCollector } from '../metrics/collector';
-import { getTenantContext } from '../lib/tenant-context';
+import { MetricsCollector } from '../metrics/metrics-collector';
+import { getTenantContext } from '../lib/tenantContext';
 
 export interface DocumentState {
   documentId: string;

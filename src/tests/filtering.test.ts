@@ -1,5 +1,5 @@
 import { ContentFilterResult, FilterResult } from '../filtering/interfaces';
-import { IMetricsCollector } from '../metrics/collector';
+import { IMetricsCollector } from '../metrics/metrics-collector';
 
 // Interface for filter stages
 interface FilterStage {

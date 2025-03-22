@@ -1,5 +1,5 @@
 import { CommandHandler, CommandRegistry } from "../commands/CommandRegistry";
-import { getTenantContext } from "../lib/tenant-context";
+import { getTenantContext } from "../lib/tenantContext";
 import { estimateCommandTokens, trackTokenUsage } from "./tokenUtils";
 import { DocumentContext } from './ContextProvider'; // Import only DocumentContext
 import { AIService } from './AIService';
@@ -51,10 +51,22 @@ export interface AIAnalysisResult {
   metadata?: Record<string, any>;
 }
 
+export interface AICommandOptions {
+  type: string;
+  requiresAIAnalysis: boolean;
+  executionParameters: {
+    timeout: number;
+    retries: number;
+    priority: 'high' | 'normal' | 'low';
+  };
+}
+
 /**
  * AI Command Registry
  */
 export class AICommandRegistry {
+  private commands: Map<string, AICommandOptions> = new Map();
+
   constructor(
     private commandRegistry: CommandRegistry,
     private aiService: AIService
@@ -114,5 +126,14 @@ export class AICommandRegistry {
       });
       return result;
     });
+  }
+
+  registerAICommand(command: AICommandOptions): void {
+    this.commands.set(command.type, command);
+  }
+
+  executeCommand(command: AICommandOptions, context: any): Promise<any> {
+    // Implement command execution logic here
+    return Promise.resolve();
   }
 }

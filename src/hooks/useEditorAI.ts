@@ -2,7 +2,7 @@
 import { Editor } from '@tiptap/core';
 import { useAI } from '@/lib/api/useAI';
 import analytics from '@/lib/analytics';
-import { useAIStreaming } from '@/components/Editor/ai-bridge/AIStreamingProvider';
+import { useAIStreaming } from 'src/components/editor/ai-bridge/AIStreamingProvider';
 import { useCallback } from 'react';
 
 export function useEditorAI(editor: Editor | null, {

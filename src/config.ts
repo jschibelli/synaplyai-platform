@@ -2,7 +2,7 @@ import { ShardedRedisClient } from './metrics/sharded-redis';
 import { RedisCircuitBreakerStore } from './circuit-breaker/redis-store';
 import { FeatureFlagService } from './features/flag-service';
 import { OperationalDashboard } from './dashboard/operational-dashboard';
-import { MetricsCollector } from './metrics/collector';
+import { MetricsCollector } from './metrics/metrics-collector';
 import { EnhancedFilterPipeline } from './filtering/filter-pipeline';
 import { PartitionManager } from './compliance/partition-manager';
 

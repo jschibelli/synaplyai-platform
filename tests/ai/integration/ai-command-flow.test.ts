@@ -13,6 +13,14 @@ import { FeatureFlagService } from '../../../src/lib/feature-flags';
 import { TokenLimiter } from '../../../src/ai/token-limiter';
 import { ContentFilterPipeline } from '../../../src/compliance/filter-pipeline';
 import { TenantAISettings } from '../../../src/ai/tenant-ai-settings';
+import { baseCommandRegistry } from '../../../src/commands/CommandRegistry';
+import { mockAIProvider } from '../../../src/ai/providers/mockAIProvider';
+import { mockRedisClient } from '../../../src/redis/mockRedisClient';
+import { mockDocument } from '../../src/documents/mockDocument';
+import { documentRepository } from '../../src/documents/documentRepository';
+import { testDocumentId, testUserId } from '../../src/test/constants';
+import { executeCompleteTextCommand } from '../../src/commands/executeCompleteTextCommand';
+import { PERFORMANCE_THRESHOLDS } from '../../src/performance/constants';
 
 // Mock dependencies
 jest.mock('../../../src/lib/tenant-context');
@@ -1664,3 +1672,23 @@ describe('Command Optimization', () => {
     expect(documentRepository.getDocument).toHaveBeenCalledTimes(1);
   });
 });
+
+const command: CompleteTextCommand = {
+  type: 'COMPLETE_TEXT',
+  documentId: testDocumentId,
+  userId: testUserId,
+  position: 120,
+  prompt: 'Complete this text',
+  contextParameters: {
+    windowSize: 100,
+    includePreceding: true,
+    includeFollowing: false
+  },
+  analysisParameters: {
+    model: 'gpt-4',
+    temperature: 0.7,
+    maxTokens: 100
+  },
+  parameters: {}, // Add required parameters
+  requiresAIAnalysis: true
+};

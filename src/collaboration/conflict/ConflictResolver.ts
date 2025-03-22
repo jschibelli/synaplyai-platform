@@ -1,7 +1,7 @@
 import { Conflict, ConflictType } from './ConflictDetector';
 import { DocumentEvent } from '../events/types';
 import { ComplianceLogger } from '../../compliance/logger';
-import { MetricsCollector } from '../../metrics/collector';
+import { MetricsCollector } from '../../metrics/metrics-collector';
 
 /**
  * Enum for resolution strategies

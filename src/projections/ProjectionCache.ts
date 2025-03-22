@@ -1,6 +1,6 @@
-import { getTenantContext } from '../lib/tenant-context';
+import { getTenantContext } from '../lib/tenantContext';
 import { ComplianceLogger } from '../compliance/logger';
-import { MetricsCollector } from '../metrics/collector';
+import { MetricsCollector } from '../metrics/metrics-collector';
 import { BaseEvent, EventStore } from '../events/EventStore';
 import Redis from 'ioredis';
 import { prisma } from '../prisma/client';

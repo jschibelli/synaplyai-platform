@@ -1,6 +1,6 @@
 import { ContentFilter, FilterResponse, ContentFilterResult } from './interfaces';
 import { ComplianceLogger } from '../compliance/logger';
-import { MetricsCollector } from '../metrics/collector';
+import { MetricsCollector } from '../metrics/metrics-collector';
 
 export enum ExecutionStrategy {
   SYNC = 'sync',         // Execute synchronously (e.g., regex filters)

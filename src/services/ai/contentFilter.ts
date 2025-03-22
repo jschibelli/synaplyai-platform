@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { getCurrentTenantId, getCurrentUserId } from 'src/lib/tenant-context';
+import { getCurrentTenantId, getCurrentUserId } from 'src/lib/tenantContext';
 
 const prisma = new PrismaClient();
 

@@ -123,4 +123,11 @@ export class VectorClock {
   static fromJSON(json: Record<string, number>): VectorClock {
     return new VectorClock(json);
   }
+
+  /**
+   * Checks if the vector clock is empty
+   */
+  isEmpty(): boolean {
+    return Object.keys(this.clock).length === 0;
+  }
 }

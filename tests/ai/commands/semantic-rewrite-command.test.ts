@@ -55,10 +55,10 @@ describe('Semantic Rewrite Command', () => {
 
     documentContext.getContext.mockResolvedValue(mockContext);
     aiService.analyze
-      .mockResolvedValueOnce({ text: mockKeyPoints })  // Extract original key points
-      .mockResolvedValueOnce({ text: mockRewrite })    // Main rewrite
-      .mockResolvedValueOnce({ text: mockKeyPoints })  // Extract rewritten key points
-      .mockResolvedValueOnce({ text: mockComparison }); // Compare key points
+      .mockResolvedValueOnce({ content: mockKeyPoints })  // Extract original key points
+      .mockResolvedValueOnce({ content: mockRewrite })    // Main rewrite
+      .mockResolvedValueOnce({ content: mockKeyPoints })  // Extract rewritten key points
+      .mockResolvedValueOnce({ content: mockComparison }); // Compare key points
 
     const result = await handler.execute(command);
 
@@ -586,6 +586,51 @@ describe('Semantic Rewrite Command', () => {
           reason: expect.stringContaining('User-2')
         })
       );
+    });
+  });
+
+  test('should execute semantic rewrite with new parameters', async () => {
+    const command: SemanticRewriteCommand = {
+      type: 'SEMANTIC_REWRITE',
+      documentId: 'doc-1',
+      userId: 'user-1',
+      position: 0,
+      prompt: 'Rewrite this text',
+      contextParameters: {
+        windowSize: 100,
+        includePreceding: true,
+        includeFollowing: false,
+        includeDocument: true // Add required parameter
+      },
+      analysisParameters: {
+        model: 'gpt-4',
+        temperature: 0.7,
+        maxTokens: 100
+      },
+      requiresAIAnalysis: true // Ensure this property exists in the type
+    };
+
+    const mockContext = {
+      content: 'Original content to be rewritten'
+    };
+
+    documentContext.getContext.mockResolvedValue(mockContext);
+    aiService.analyze.mockResolvedValueOnce({
+      text: 'Rewritten content with new parameters',
+      metadata: {
+        model: 'gpt-4',
+        temperature: 0.7,
+        maxTokens: 100
+      }
+    });
+
+    const result = await handler.execute(command);
+
+    expect(result.text).toBe('Rewritten content with new parameters');
+    expect(result.metadata).toMatchObject({
+      model: 'gpt-4',
+      temperature: 0.7,
+      maxTokens: 100
     });
   });
 });

@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { getCurrentTenantId } from '../lib/tenant-context';
+import { getCurrentTenantId } from '../lib/tenantContext';
 
 /**
  * Adds tenant filtering to Prisma queries

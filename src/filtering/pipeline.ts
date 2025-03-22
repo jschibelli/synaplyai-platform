@@ -1,4 +1,4 @@
-import { MetricsCollector } from '../metrics/collector';
+import { MetricsCollector } from '../metrics/metrics-collector';
 import { FeatureFlagService } from '../features/flag-service';
 import { FilterResult, FilterDecision } from './interfaces';
 import { RegexFilter } from './regex-filter';
@@ -6,7 +6,7 @@ import { EmbeddingFilter } from './embedding-filter';
 import { LLMFilter } from './llm-filter';
 import { ContentFilter, ContentFilterPipeline, FilterResponse, ContentFilterResult } from './interfaces';
 import { ComplianceLogger } from '../compliance/logger';
-import { getCurrentTenantId } from '../lib/tenant-context';
+import { getCurrentTenantId } from '../lib/tenantContext';
 
 export enum FilterDecision {
   ALLOW = 'ALLOW',

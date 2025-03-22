@@ -1,6 +1,6 @@
 import { AIAnalysisParameters, AIAnalysisResult } from './AICommandRegistry';
 import { DocumentContext } from './ContextProvider';
-import { getTenantContext } from '../lib/tenant-context';
+import { getTenantContext } from '../lib/tenantContext';
 import { generateCommandCacheKey, shouldCacheResult, getCacheExpiry, trackTokenUsage } from './tokenUtils';
 import { CircuitBreaker } from '../lib/circuit-breaker';
 import { MetricsCollector } from '../metrics/metrics-collector';

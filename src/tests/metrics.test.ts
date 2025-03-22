@@ -1,6 +1,6 @@
 import { CircuitState } from '../circuit-breaker/interfaces';
 import { ContentFilterResult } from '../filtering/interfaces';
-import { getCurrentTenantId } from '../lib/tenant-context';
+import { getCurrentTenantId } from '../lib/tenantContext';
 
 // Create a mock for getCurrentTenantId
 jest.mock('../lib/tenant-context', () => ({

@@ -1,6 +1,6 @@
-import { getTenantContext } from '../lib/tenant-context';
+import { getTenantContext } from '../lib/tenantContext';
 import { ComplianceLogger } from '../compliance/logger';
-import { MetricsCollector } from '../metrics/collector';
+import { MetricsCollector } from '../metrics/metrics-collector';
 
 /**
  * Hybrid Logical Clock implementation for consistent ordering 

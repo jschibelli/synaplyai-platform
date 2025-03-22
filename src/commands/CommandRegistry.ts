@@ -1,8 +1,8 @@
-import { getTenantContext } from '../lib/tenant-context';
+import { getTenantContext } from '../lib/tenantContext';
 import { ComplianceLogger } from '../compliance/logger';
 import { EventStore, BaseEvent, SchemaVersion } from '../events/EventStore';
 import { TransactionManager } from '../transactions/TransactionManager';
-import { MetricsCollector } from '../metrics/collector';
+import { MetricsCollector } from '../metrics/metrics-collector';
 import { createHash } from 'crypto';
 
 /**

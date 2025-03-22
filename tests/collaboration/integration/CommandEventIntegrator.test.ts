@@ -1,7 +1,7 @@
 import { CommandEventIntegrator } from '../../../src/collaboration/integration/CommandEventIntegrator';
 import { TransactionManager } from '../../../src/collaboration/transactions/TransactionManager';
 import { EventStore } from '../../../src/collaboration/events/EventStore';
-import { MetricsCollector } from '../../../src/metrics/collector';
+import { MetricsCollector } from '../../../src/metrics/metrics-collector';
 import { Command } from '../../../src/collaboration/commands/CommandRegistry';
 
 jest.mock('../../../src/metrics/collector');

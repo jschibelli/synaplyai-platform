@@ -1,5 +1,5 @@
 import { UsageMetrics } from '../models/UsageMetrics';
-import { getCurrentTenantContext } from '../lib/tenant-context';
+import { getCurrentTenantContext } from '../lib/tenantContext';
 
 interface TenantMetrics extends UsageMetrics {
   tenantId: string;

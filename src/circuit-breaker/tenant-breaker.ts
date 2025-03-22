@@ -2,7 +2,7 @@
 import { EventEmitter } from 'events';
 import { CircuitBreaker, CircuitBreakerOptions, CircuitBreakerStore, CircuitState } from './interfaces';
 import { ComplianceLogger } from '../compliance/logger';
-import { MetricsCollector } from '../metrics/collector';
+import { MetricsCollector } from '../metrics/metrics-collector';
 
 export class TenantAwareCircuitBreaker implements CircuitBreaker {
   private store: CircuitBreakerStore;

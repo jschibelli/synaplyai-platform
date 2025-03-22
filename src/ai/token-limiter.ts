@@ -1,4 +1,4 @@
-import { getTenantContext } from '../lib/tenant-context';
+import { getTenantContext } from '../lib/tenantContext';
 import { MetricsCollector } from '../metrics/metrics-collector';
 
 /**

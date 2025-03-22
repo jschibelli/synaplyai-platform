@@ -1,5 +1,6 @@
 import { ContextProvider, DocumentRepository, Document } from '../../src/ai/ContextProvider';
-import { getTenantContext } from '../../src/lib/tenant-context';
+import { getTenantContext } from '../../src/lib/tenantContext';
+import { AICommandContextParameters } from './AICommandRegistry';
 
 // Mock dependencies
 jest.mock('../../src/lib/tenant-context');
