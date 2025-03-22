@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { getTenantContext } from './tenantContext';
+import { getTenantContext } from './tenant-context';
 
 // PrismaClient is attached to the `global` object in development to prevent
 // exhausting your database connection limit.

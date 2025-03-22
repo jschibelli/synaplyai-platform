@@ -1,6 +1,6 @@
 import { Command, CommandHandler } from './CommandRegistry';
 import { EventStore } from '../events/EventStore';
-import { getCurrentTenantContext } from '../../lib/tenantContext';
+import { getCurrentTenantContext } from '../../lib/tenant-context';
 import { DocumentVersionManager } from './DocumentVersionManager';
 import { DocumentAuthorizationService } from './DocumentAuthorizationService';
 

@@ -6,7 +6,7 @@ import { EmbeddingFilter } from './embedding-filter';
 import { LLMFilter } from './llm-filter';
 import { ContentFilter, ContentFilterPipeline, FilterResponse, ContentFilterResult } from './interfaces';
 import { ComplianceLogger } from '../compliance/logger';
-import { getCurrentTenantId } from '../lib/tenantContext';
+import { getCurrentTenantId } from '../lib/tenant-context';
 
 export enum FilterDecision {
   ALLOW = 'ALLOW',

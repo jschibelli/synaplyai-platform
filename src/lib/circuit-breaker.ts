@@ -1,4 +1,4 @@
-import { getTenantContext } from './tenantContext';
+import { getTenantContext } from './tenant-context';
 
 /**
  * Circuit breaker states

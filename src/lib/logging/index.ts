@@ -1,4 +1,4 @@
-import { getCurrentTenantId, getCurrentUserId } from '../tenantContext';
+import { getCurrentTenantId, getCurrentUserId } from '../tenant-context';
 
 export interface LogEntry {
   level: 'info' | 'warn' | 'error';

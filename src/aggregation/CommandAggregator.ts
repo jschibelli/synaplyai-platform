@@ -1,4 +1,4 @@
-import { getTenantContext } from '../lib/tenantContext';
+import { getTenantContext } from '../lib/tenant-context';
 import { CommandRegistry, CommandResult, DocumentCommand, InsertTextCommand, DeleteTextCommand, FormatTextCommand } from '../commands/CommandRegistry';
 import { BaseEvent } from '../events/EventStore';
 import { MetricsCollector } from '../metrics/metrics-collector';

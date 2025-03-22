@@ -1,4 +1,4 @@
-import { getTenantContext } from '../lib/tenantContext';
+import { getTenantContext } from '../lib/tenant-context';
 import { CommandRegistry } from '../commands/CommandRegistry';
 import { TransactionManager } from '../transactions/TransactionManager';
 import { MetricsCollector } from '../metrics/metrics-collector';

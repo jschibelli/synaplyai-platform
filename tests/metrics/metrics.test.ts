@@ -1,5 +1,5 @@
 import { MetricsCollector } from '../../src/lib/metrics';
-import { tenantContextStorage, TenantContext } from '../../src/lib/tenantContext';
+import { tenantContextStorage, TenantContext } from '../../src/lib/tenant-context';
 
 describe('Metrics Collection', () => {
   let metrics: MetricsCollector;

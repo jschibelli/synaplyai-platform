@@ -3,7 +3,7 @@ import { EventStore } from '../events/EventStore';
 import { SnapshotStore, Snapshot, SnapshotMetadata } from './SnapshotStore';
 import { DocumentId } from '../types';
 import { ComplianceLogger } from '../../compliance/logger';
-import { getTenantContext } from '../../lib/tenantContext';
+import { getTenantContext } from '../../lib/tenant-context';
 
 export interface SnapshotConfig {
   minEventCount: number;

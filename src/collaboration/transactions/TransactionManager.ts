@@ -1,5 +1,5 @@
 import { PrismaClient, Prisma } from '@prisma/client';
-import { getTenantContext } from '../../lib/tenantContext';
+import { getTenantContext } from '../../lib/tenant-context';
 import { MetricsCollector } from '../../metrics/metrics-collector';
 
 export interface HybridLogicalClock {

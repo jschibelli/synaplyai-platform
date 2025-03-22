@@ -1,6 +1,6 @@
 import { MetricsCollector } from '../metrics/metrics-collector';
 import { ComplianceLogger } from '../compliance/logger';
-import { getTenantContext } from '../lib/tenantContext';
+import { getTenantContext } from '../lib/tenant-context';
 
 export enum ContentFilterResult {
   ALLOWED = 'allowed',

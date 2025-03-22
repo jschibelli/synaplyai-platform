@@ -6,7 +6,7 @@ import { ComplianceLogger } from '../compliance/logger';
 import { MetricsCollector } from '../metrics/metrics-collector';
 import { ShardedRedisClient } from '../metrics/sharded-redis';
 import { EnhancedFilterPipeline, ExecutionStrategy } from '../filtering/filter-pipeline';
-import { setTenantContext } from '../lib/tenantContext';
+import { setTenantContext } from '../lib/tenant-context';
 
 // Initialize the mockTenantContext for the demo
 function setupTenantContext(tenantId: string, userId: string): void {

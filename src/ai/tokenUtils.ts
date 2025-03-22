@@ -113,7 +113,7 @@ function generateContextHash(context?: DocumentContext): string {
 }
 
 import { AICommand } from './AICommandRegistry';
-import { getTenantContext } from '../lib/tenantContext';
+import { getTenantContext } from '../lib/tenant-context';
 
 // Simple token estimation function (production implementation would use a proper tokenizer)
 export function estimateCommandTokens(command: AICommand): number {

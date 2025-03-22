@@ -1,4 +1,4 @@
-import { getTenantContext } from '../lib/tenantContext';
+import { getTenantContext } from '../lib/tenant-context';
 import { ComplianceLogger } from '../compliance/logger';
 import { EventStore, BaseEvent, SchemaVersion } from '../events/EventStore';
 import { TransactionManager } from '../transactions/TransactionManager';

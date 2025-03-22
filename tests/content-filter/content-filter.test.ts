@@ -1,5 +1,5 @@
 import { ContentFilter } from '../../src/services/ai/contentFilter';
-import { tenantContextStorage, TenantContext } from '../../src/lib/tenantContext';
+import { tenantContextStorage, TenantContext } from '../../src/lib/tenant-context';
 
 describe('Content Filter', () => {
   let contentFilter: ContentFilter;

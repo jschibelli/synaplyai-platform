@@ -1,6 +1,6 @@
 import { OpenAI } from 'openai';
 import { AIService } from './base';
-import { getCurrentTenantId } from 'src/lib/tenantContext';
+import { getCurrentTenantId } from 'src/lib/tenant-context';
 
 export class OpenAIService extends AIService {
   private client: OpenAI;

@@ -1,4 +1,4 @@
-import { tenantContextStorage, TenantContext, setCurrentTenantContext, getCurrentTenantContext, getCurrentTenantId } from '../../src/lib/tenantContext';
+import { tenantContextStorage, TenantContext, setCurrentTenantContext, getCurrentTenantContext, getCurrentTenantId } from '../../src/lib/tenant-context';
 import { PrismaClient } from '@prisma/client';
 import { addTenantMiddleware } from '../../src/prisma/middleware';
 

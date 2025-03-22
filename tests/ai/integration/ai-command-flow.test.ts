@@ -13,14 +13,14 @@ import { FeatureFlagService } from '../../../src/lib/feature-flags';
 import { TokenLimiter } from '../../../src/ai/token-limiter';
 import { ContentFilterPipeline } from '../../../src/compliance/filter-pipeline';
 import { TenantAISettings } from '../../../src/ai/tenant-ai-settings';
-import { baseCommandRegistry } from '../../../src/commands/CommandRegistry';
+import { CommandRegistry } from '../../../src/commands/CommandRegistry';
 import { mockAIProvider } from '../../../src/ai/providers/mockAIProvider';
 import { mockRedisClient } from '../../../src/redis/mockRedisClient';
-import { mockDocument } from '../../src/documents/mockDocument';
-import { documentRepository } from '../../src/documents/documentRepository';
-import { testDocumentId, testUserId } from '../../src/test/constants';
-import { executeCompleteTextCommand } from '../../src/commands/executeCompleteTextCommand';
-import { PERFORMANCE_THRESHOLDS } from '../../src/performance/constants';
+import { mockDocument } from '../../../src/documents/mockDocument';
+import { documentRepository } from '../../../src/documents/documentRepository';
+import { testDocumentId, testUserId } from '../../../src/test/constants';
+import { executeCompleteTextCommand } from '../../../src/commands/executeCompleteTextCommand';
+import { PERFORMANCE_THRESHOLDS } from '../../../src/test/constants';
 
 // Mock dependencies
 jest.mock('../../../src/lib/tenant-context');
@@ -48,7 +48,7 @@ describe('AI Command Integration Flow', () => {
   let mockRedisClient: any;
 
   // Mock command registry that will be wrapped by AICommandRegistry
-  const baseCommandRegistry = {
+  const CommandRegistry = {
     register: jest.fn(),
     execute: jest.fn(),
     middleware: []
@@ -148,7 +148,7 @@ describe('AI Command Integration Flow', () => {
 
     // Set up command registry
     commandRegistry = {
-      ...baseCommandRegistry,
+      ...CommandRegistry,
       execute: jest.fn().mockImplementation(cmd => {
         // Simulate command execution
         if (cmd.type === 'INSERT_TEXT') {
@@ -177,7 +177,7 @@ describe('AI Command Integration Flow', () => {
     );
 
     // Override the register method to hook into the base registry
-    aiCommandRegistry.register = baseCommandRegistry.register;
+    aiCommandRegistry.register = CommandRegistry.register;
   });
 
   // Add after the test data declarations
@@ -205,8 +205,8 @@ describe('AI Command Integration Flow', () => {
       requiresAIAnalysis: true
     };
   
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
   
     return handler(command);
@@ -235,8 +235,8 @@ describe('AI Command Integration Flow', () => {
       requiresAIAnalysis: true
     };
   
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
   
     await handler(command);
@@ -248,22 +248,22 @@ describe('AI Command Integration Flow', () => {
       await registerAICommands(aiCommandRegistry);
       
       // Verify command registration
-      expect(baseCommandRegistry.register).toHaveBeenCalledTimes(3);
-      expect(baseCommandRegistry.register).toHaveBeenCalledWith(
+      expect(CommandRegistry.register).toHaveBeenCalledTimes(3);
+      expect(CommandRegistry.register).toHaveBeenCalledWith(
         'COMPLETE_TEXT',
         expect.any(Function),
         expect.objectContaining({
           validator: expect.any(Function)
         })
       );
-      expect(baseCommandRegistry.register).toHaveBeenCalledWith(
+      expect(CommandRegistry.register).toHaveBeenCalledWith(
         'REWRITE_TEXT',
         expect.any(Function),
         expect.objectContaining({
           validator: expect.any(Function)
         })
       );
-      expect(baseCommandRegistry.register).toHaveBeenCalledWith(
+      expect(CommandRegistry.register).toHaveBeenCalledWith(
         'GRAMMAR_CHECK',
         expect.any(Function),
         expect.objectContaining({
@@ -300,8 +300,8 @@ describe('AI Command Integration Flow', () => {
       };
       
       // Get the registered handler
-      const commandHandler = baseCommandRegistry.register.mock.calls.find(
-        call => call[0] === 'COMPLETE_TEXT'
+      const commandHandler = CommandRegistry.register.mock.calls.find(
+        (call: any) => call[0] === 'COMPLETE_TEXT'
       )[1];
       
       // Execute the handler with the command
@@ -368,8 +368,8 @@ describe('AI Command Integration Flow', () => {
       };
       
       // Get the registered handler
-      const commandHandler = baseCommandRegistry.register.mock.calls.find(
-        call => call[0] === 'REWRITE_TEXT'
+      const commandHandler = CommandRegistry.register.mock.calls.find(
+        (call: any) => call[0] === 'REWRITE_TEXT'
       )[1];
       
       // Execute the handler with the command
@@ -449,8 +449,8 @@ describe('AI Command Integration Flow', () => {
       };
       
       // Get the registered handler
-      const commandHandler = baseCommandRegistry.register.mock.calls.find(
-        call => call[0] === 'GRAMMAR_CHECK'
+      const commandHandler = CommandRegistry.register.mock.calls.find(
+        (call: any) => call[0] === 'GRAMMAR_CHECK'
       )[1];
       
       // Execute the handler with the command
@@ -527,8 +527,8 @@ describe('AI Command Integration Flow', () => {
       };
       
       // Get the registered handler
-      const commandHandler = baseCommandRegistry.register.mock.calls.find(
-        call => call[0] === 'COMPLETE_TEXT'
+      const commandHandler = CommandRegistry.register.mock.calls.find(
+        (call: any) => call[0] === 'COMPLETE_TEXT'
       )[1];
       
       // Execute the handler and expect it to throw
@@ -571,8 +571,8 @@ describe('AI Command Integration Flow', () => {
       };
       
       // Get the registered handler
-      const commandHandler = baseCommandRegistry.register.mock.calls.find(
-        call => call[0] === 'REWRITE_TEXT'
+      const commandHandler = CommandRegistry.register.mock.calls.find(
+        (call: any) => call[0] === 'REWRITE_TEXT'
       )[1];
       
       // Execute the handler and expect it to throw
@@ -615,8 +615,8 @@ describe('AI Command Integration Flow', () => {
       };
       
       // Get the registered handler
-      const commandHandler = baseCommandRegistry.register.mock.calls.find(
-        call => call[0] === 'COMPLETE_TEXT'
+      const commandHandler = CommandRegistry.register.mock.calls.find(
+        (call: any) => call[0] === 'COMPLETE_TEXT'
       )[1];
       
       // Execute the handler and expect it to throw due to missing tenant context
@@ -659,8 +659,8 @@ describe('AI Command Integration Flow', () => {
       };
       
       // Get the registered handler
-      const commandHandler = baseCommandRegistry.register.mock.calls.find(
-        call => call[0] === 'GRAMMAR_CHECK'
+      const commandHandler = CommandRegistry.register.mock.calls.find(
+        (call: any) => call[0] === 'GRAMMAR_CHECK'
       )[1];
       
       // Execute the handler and expect it to throw due to disabled feature
@@ -852,8 +852,8 @@ describe('AI Command Caching', () => {
     };
 
     // Execute command twice
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'GRAMMAR_CHECK'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'GRAMMAR_CHECK'
     )[1];
 
     await handler(command);
@@ -889,8 +889,8 @@ describe('AI Command Caching', () => {
       requiresAIAnalysis: true
     };
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
 
     await handler(command);
@@ -928,8 +928,8 @@ describe('AI Command Caching', () => {
       requiresAIAnalysis: true
     };
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'GRAMMAR_CHECK'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'GRAMMAR_CHECK'
     )[1];
 
     // First execution
@@ -982,8 +982,8 @@ describe('Context Optimization', () => {
       requiresAIAnalysis: true
     };
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
 
     const result = await handler(command);
@@ -1060,8 +1060,8 @@ describe('Context Optimization', () => {
       requiresAIAnalysis: true
     };
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
 
     await handler(command);
@@ -1092,8 +1092,8 @@ describe('Context Optimization', () => {
       requiresAIAnalysis: true
     };
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
 
     await handler(commandWithTokenLimit);
@@ -1132,8 +1132,8 @@ describe('AI Command Intent Detection', () => {
       requiresAIAnalysis: true
     };
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
 
     await handler(command);
@@ -1172,8 +1172,8 @@ describe('AI Command Intent Detection', () => {
       requiresAIAnalysis: true
     };
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
 
     const result = await handler(command);
@@ -1211,8 +1211,8 @@ describe('AI Command Intent Detection', () => {
       text: 'Corrected and formal version...'
     });
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
 
     const result = await handler(command);
@@ -1244,8 +1244,8 @@ describe('AI Command Intent Detection', () => {
       requiresAIAnalysis: true
     };
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
 
     await handler(command);
@@ -1284,8 +1284,8 @@ describe('AI Command Error Boundaries', () => {
       requiresAIAnalysis: true
     };
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
 
     const result = await handler(command);
@@ -1318,8 +1318,8 @@ describe('AI Command Error Boundaries', () => {
       requiresAIAnalysis: true
     };
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
 
     const result = await handler(command);
@@ -1344,8 +1344,8 @@ describe('AI Command Error Boundaries', () => {
       requiresAIAnalysis: true
     };
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
 
     try {
@@ -1379,8 +1379,8 @@ describe('AI Command Pipeline Transformation', () => {
       requiresAIAnalysis: true
     };
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
 
     const result = await handler(command);
@@ -1409,8 +1409,8 @@ describe('AI Command State Recovery', () => {
       throw new Error('Process terminated');
     });
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
 
     // Attempt command execution
@@ -1450,8 +1450,8 @@ describe('Command Progress Tracking', () => {
       requiresAIAnalysis: true
     };
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
 
     await handler(command);
@@ -1499,8 +1499,8 @@ describe('Command Parameter Validation', () => {
       requiresAIAnalysis: true
     };
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
 
     await expect(handler(invalidCommand)).rejects.toThrow(/Invalid command parameters/);
@@ -1525,8 +1525,8 @@ describe('Command Parameter Validation', () => {
       requiresAIAnalysis: true
     };
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
 
     await expect(handler(command)).rejects.toThrow(/Exceeds tenant limits/);
@@ -1545,8 +1545,8 @@ describe('Command Pipeline Metrics', () => {
       collectMetrics: true
     };
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
 
     const result = await handler(command);
@@ -1591,8 +1591,8 @@ describe('Command Pipeline Metrics', () => {
       collectMetrics: true
     };
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
 
     await handler(command);
@@ -1657,8 +1657,8 @@ describe('Command Optimization', () => {
       requiresAIAnalysis: true
     };
 
-    const handler = baseCommandRegistry.register.mock.calls.find(
-      call => call[0] === 'COMPLETE_TEXT'
+    const handler = CommandRegistry.register.mock.calls.find(
+      (call: any) => call[0] === 'COMPLETE_TEXT'
     )[1];
 
     // Execute command twice in similar context

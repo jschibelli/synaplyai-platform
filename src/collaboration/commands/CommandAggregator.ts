@@ -1,6 +1,6 @@
 import { Command, CommandResult, DocumentCommand } from './types';
 import { MetricsCollector } from '../../metrics/metrics-collector';
-import { getTenantContext } from '../../lib/tenantContext';
+import { getTenantContext } from '../../lib/tenant-context';
 import { CommandRegistry } from './CommandRegistry';
 
 /**

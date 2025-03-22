@@ -1,233 +1,233 @@
-export interface Operation {
-  type: 'insert' | 'delete' | 'retain';
-  position: number;
-  content?: string;
-  length?: number;
+export interface BaseOperation {
+  type: string;
+  userId: string;
+  timestamp: number;
 }
+
+export interface InsertOperation extends BaseOperation {
+  type: 'insert';
+  position: number;
+  text: string;
+}
+
+export interface DeleteOperation extends BaseOperation {
+  type: 'delete';
+  position: number;
+  length: number;
+}
+
+export interface ReplaceOperation extends BaseOperation {
+  type: 'replace';
+  position: number;
+  length: number;
+  text: string;
+}
+
+export type Operation = InsertOperation | DeleteOperation | ReplaceOperation;
 
 export class OperationalTransform {
   /**
-   * Transforms two operations to be applied in parallel
-   * @param op1 First operation
-   * @param op2 Second operation
-   * @returns Pair of transformed operations
+   * Transform operation against another operation
+   * Returns a transformed operation that can be applied after the other operation
    */
-  transform(op1: Operation, op2: Operation): [Operation, Operation] {
-    // Handle insert vs insert
-    if (op1.type === 'insert' && op2.type === 'insert') {
-      if (op1.position < op2.position) {
-        // op1 inserts before op2 - adjust op2's position
-        return [op1, { ...op2, position: op2.position + op1.content!.length }];
-      } else if (op1.position > op2.position) {
-        // op2 inserts before op1 - adjust op1's position
-        return [{ ...op1, position: op1.position + op2.content!.length }, op2];
-      } else {
-        // Same position - use client IDs to break tie (client with lower ID goes first)
-        if ((op1 as any).clientId < (op2 as any).clientId) {
-          return [op1, { ...op2, position: op2.position + op1.content!.length }];
-        } else {
-          return [{ ...op1, position: op1.position + op2.content!.length }, op2];
+  static transform(op1: Operation, op2: Operation): Operation {
+    try {
+      // Insert vs Insert
+      if (op1.type === 'insert' && op2.type === 'insert') {
+        // If op2 inserts at a position before or at op1's position,
+        // op1's position needs to be shifted by the length of op2's text
+        if (op2.position <= op1.position) {
+          return {
+            ...op1,
+            position: op1.position + op2.text.length
+          };
         }
+        // Otherwise, op1 remains unchanged
+        return { ...op1 };
       }
-    } 
-    
-    // Handle delete vs delete
-    else if (op1.type === 'delete' && op2.type === 'delete') {
-      if (op1.position < op2.position) {
-        // op1 deletes before op2 - adjust op2's position
-        if (op1.position + op1.length! <= op2.position) {
-          // No overlap
-          return [op1, { ...op2, position: op2.position - op1.length! }];
-        } else if (op1.position + op1.length! >= op2.position + op2.length!) {
-          // op1 completely contains op2
-          return [
-            { ...op1, length: op1.length! - op2.length! }, 
-            { type: 'retain', position: op2.position, length: 0 }
-          ];
-        } else {
-          // Partial overlap - op1 deletes part of what op2 deletes
-          const overlap = (op1.position + op1.length!) - op2.position;
-          return [
-            op1,
-            { ...op2, position: op1.position, length: op2.length! - overlap }
-          ];
+      
+      // Insert vs Delete
+      if (op1.type === 'insert' && op2.type === 'delete') {
+        if (op2.position <= op1.position) {
+          // If op2 deletes before op1's position, adjust op1's position
+          // Position is reduced by the amount of text deleted before op1's position
+          const overlapEnd = op2.position + op2.length;
+          const affect = Math.max(0, Math.min(overlapEnd - op1.position, op2.length));
+          return {
+            ...op1,
+            position: op1.position - affect
+          };
         }
-      } else if (op1.position > op2.position) {
-        // op2 deletes before op1 - handle symmetrically
-        const [transformedOp2, transformedOp1] = this.transform(op2, op1);
-        return [transformedOp1, transformedOp2];
-      } else {
-        // Same position - take longest delete or combine them
-        if (op1.length! === op2.length!) {
-          // Both delete the same range
-          return [
-            op1, 
-            { type: 'retain', position: op2.position, length: 0 }
-          ];
-        } else if (op1.length! > op2.length!) {
-          // op1 deletes more
-          return [
-            { ...op1, length: op1.length! - op2.length! },
-            { type: 'retain', position: op2.position, length: 0 }
-          ];
-        } else {
-          // op2 deletes more
-          return [
-            { type: 'retain', position: op1.position, length: 0 },
-            { ...op2, length: op2.length! - op1.length! }
-          ];
+        // Otherwise, op1 remains unchanged
+        return { ...op1 };
+      }
+      
+      // Delete vs Insert
+      if (op1.type === 'delete' && op2.type === 'insert') {
+        if (op2.position <= op1.position) {
+          // If op2 inserts before op1's position, op1's position needs to be shifted
+          return {
+            ...op1,
+            position: op1.position + op2.text.length
+          };
+        } else if (op2.position < op1.position + op1.length) {
+          // If op2 inserts within the range op1 is deleting, 
+          // the delete length needs to be extended
+          return {
+            ...op1,
+            length: op1.length + op2.text.length
+          };
         }
+        // Otherwise, op1 remains unchanged
+        return { ...op1 };
       }
-    } 
-    
-    // Handle insert vs delete
-    else if (op1.type === 'insert' && op2.type === 'delete') {
-      if (op1.position <= op2.position) {
-        // op1 inserts before or at op2's position
-        return [op1, { ...op2, position: op2.position + op1.content!.length }];
-      } else if (op1.position >= op2.position + op2.length!) {
-        // op1 inserts after op2's deletion range
-        return [{ ...op1, position: op1.position - op2.length! }, op2];
-      } else {
-        // op1 inserts within op2's deletion range - split op2's delete
-        return [
-          { ...op1, position: op2.position },
-          { 
-            ...op2, 
-            length: op2.length! + op1.content!.length 
-          }
-        ];
+      
+      // Delete vs Delete
+      if (op1.type === 'delete' && op2.type === 'delete') {
+        // Four cases: before, overlapping from left, contained within, overlapping from right
+        if (op2.position + op2.length <= op1.position) {
+          // op2 is entirely before op1
+          return {
+            ...op1,
+            position: op1.position - op2.length
+          };
+        } else if (op2.position <= op1.position && op2.position + op2.length >= op1.position + op1.length) {
+          // op2 completely contains op1
+          // op1 becomes a no-op with length 0
+          return {
+            ...op1,
+            position: op2.position,
+            length: 0
+          };
+        } else if (op2.position <= op1.position) {
+          // op2 overlaps from left
+          const remaining = op1.position + op1.length - (op2.position + op2.length);
+          return {
+            ...op1,
+            position: op2.position,
+            length: Math.max(0, remaining)
+          };
+        } else if (op2.position < op1.position + op1.length) {
+          // op2 overlaps from right or is contained within op1
+          const overlap = (op1.position + op1.length) - op2.position;
+          return {
+            ...op1,
+            length: op1.length - Math.min(overlap, op2.length)
+          };
+        }
+        // Otherwise, op1 remains unchanged
+        return { ...op1 };
       }
-    } 
-    
-    // Handle delete vs insert
-    else if (op1.type === 'delete' && op2.type === 'insert') {
-      // Switch arguments and reverse result
-      const [transformedOp2, transformedOp1] = this.transform(op2, op1);
-      return [transformedOp1, transformedOp2];
-    } 
-    
-    // Handle retain operations
-    else if (op1.type === 'retain' && op2.type === 'retain') {
-      return [op1, op2]; // No transformation needed
-    } else if (op1.type === 'retain') {
-      return [op1, op2]; // op1 does nothing, no transformation needed
-    } else if (op2.type === 'retain') {
-      return [op1, op2]; // op2 does nothing, no transformation needed
-    }
-
-    // Default case - should not happen with valid operations
-    return [op1, op2];
-  }
-
-  /**
-   * Composes two sequential operations into a single operation
-   * @param op1 First operation to apply
-   * @param op2 Second operation to apply
-   * @returns Combined operation with same effect as applying op1 then op2
-   */
-  compose(op1: Operation, op2: Operation): Operation {
-    // Special cases for composing operations
-    if (op1.type === 'insert' && op2.type === 'insert' && 
-        op1.position + op1.content!.length === op2.position) {
-      // Sequential inserts that can be combined
-      return {
-        type: 'insert',
-        position: op1.position,
-        content: op1.content + op2.content
-      };
-    } 
-    
-    else if (op1.type === 'delete' && op2.type === 'delete' && 
-             op2.position === op1.position) {
-      // Sequential deletes that can be combined
-      return {
-        type: 'delete',
-        position: op1.position,
-        length: op1.length! + op2.length!
-      };
-    }
-    
-    else if (op1.type === 'retain' && op2.type !== 'retain') {
-      // Retain followed by a real operation - just use op2
-      return op2;
-    }
-    
-    else if (op1.type !== 'retain' && op2.type === 'retain') {
-      // Real operation followed by retain - just use op1
-      return op1;
-    }
-    
-    else if (op1.type === 'retain' && op2.type === 'retain') {
-      // Both retains - combine lengths
-      return {
-        type: 'retain',
-        position: op1.position,
-        length: (op1.length || 0) + (op2.length || 0)
-      };
-    }
-
-    // For more complex cases, we would need a more sophisticated composition algorithm
-    // For now, just return op2 which is a reasonable fallback for many cases
-    return op2;
-  }
-
-  /**
-   * Applies an operation to a document
-   * @param doc Document text before operation
-   * @param op Operation to apply
-   * @returns New document text after applying operation
-   */
-  applyOperation(doc: string, op: Operation): string {
-    switch (op.type) {
-      case 'insert':
-        if (!op.content) return doc;
-        return doc.slice(0, op.position) + op.content + doc.slice(op.position);
       
-      case 'delete':
-        if (!op.length) return doc;
-        return doc.slice(0, op.position) + doc.slice(op.position + op.length);
-      
-      case 'retain':
-        return doc;
-      
-      default:
-        return doc;
-    }
-  }
-
-  /**
-   * Inverts an operation so it can be undone
-   * @param op Operation to invert
-   * @returns Inverse operation that undoes the effect of op
-   */
-  invert(op: Operation): Operation {
-    switch (op.type) {
-      case 'insert':
-        return {
+      // Replace operations - handle as delete + insert for simplicity
+      if (op1.type === 'replace') {
+        // First transform as delete
+        const deleteOp: DeleteOperation = {
           type: 'delete',
-          position: op.position,
-          length: op.content!.length
+          position: op1.position,
+          length: op1.length,
+          userId: op1.userId,
+          timestamp: op1.timestamp
         };
+        
+        const transformedDelete = this.transform(deleteOp, op2) as DeleteOperation;
+        
+        // Then transform as insert
+        const insertOp: InsertOperation = {
+          type: 'insert',
+          position: op1.position,
+          text: op1.text,
+          userId: op1.userId,
+          timestamp: op1.timestamp
+        };
+        
+        const transformedInsert = this.transform(insertOp, op2) as InsertOperation;
+        
+        // Combine into replace
+        return {
+          type: 'replace',
+          position: transformedInsert.position,
+          length: transformedDelete.length,
+          text: transformedInsert.text,
+          userId: op1.userId,
+          timestamp: op1.timestamp
+        };
+      }
       
-      case 'delete':
-        // Note: To fully implement this, we would need the deleted content
-        // For now, we return a placeholder that can be filled in by the caller
+      // Default fallback is to return the operation unchanged
+      return { ...op1 };
+    } catch (error) {
+      // Log the error for debugging
+      console.error('Error transforming operations:', error, { op1, op2 });
+      
+      // Return original operation as fallback
+      return { ...op1 };
+    }
+  }
+
+  /**
+   * Apply operation to document content
+   */
+  static apply(doc: string, op: Operation): string {
+    try {
+      switch (op.type) {
+        case 'insert':
+          // Ensure position is within bounds
+          const insertPosition = Math.max(0, Math.min(op.position, doc.length));
+          return doc.slice(0, insertPosition) + op.text + doc.slice(insertPosition);
+          
+        case 'delete':
+          // Ensure position and length are within bounds
+          const deletePosition = Math.max(0, Math.min(op.position, doc.length));
+          const deleteLength = Math.max(0, Math.min(op.length, doc.length - deletePosition));
+          return doc.slice(0, deletePosition) + doc.slice(deletePosition + deleteLength);
+          
+        case 'replace':
+          // Ensure position and length are within bounds
+          const replacePosition = Math.max(0, Math.min(op.position, doc.length));
+          const replaceLength = Math.max(0, Math.min(op.length, doc.length - replacePosition));
+          return doc.slice(0, replacePosition) + op.text + doc.slice(replacePosition + replaceLength);
+          
+        default:
+          throw new Error(`Unsupported operation type: ${(op as any).type}`);
+      }
+    } catch (error) {
+      console.error('Error applying operation:', error, { operation: op, document: doc });
+      return doc; // Return original document on error
+    }
+  }
+
+  /**
+   * Compose two sequential operations into a single operation
+   */
+  static compose(op1: Operation, op2: Operation): Operation {
+    if (op1.type === 'insert' && op2.type === 'insert' && op1.userId === op2.userId) {
+      // Sequential inserts at the same position by the same user
+      if (op2.position === op1.position + op1.text.length) {
         return {
           type: 'insert',
-          position: op.position,
-          content: '' // Caller must fill in the deleted content
+          position: op1.position,
+          text: op1.text + op2.text,
+          userId: op1.userId,
+          timestamp: op2.timestamp // Use latest timestamp
         };
-      
-      case 'retain':
-        return {
-          type: 'retain',
-          position: op.position,
-          length: op.length
-        };
-      
-      default:
-        return op;
+      }
     }
+    
+    if (op1.type === 'delete' && op2.type === 'delete' && op1.userId === op2.userId) {
+      // Sequential deletes at the same position by the same user
+      if (op2.position === op1.position) {
+        return {
+          type: 'delete',
+          position: op1.position,
+          length: op1.length + op2.length,
+          userId: op1.userId,
+          timestamp: op2.timestamp // Use latest timestamp
+        };
+      }
+    }
+    
+    // For other cases, apply op1 then op2
+    return op2;
   }
 }

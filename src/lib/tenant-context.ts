@@ -130,3 +130,25 @@ export function setDefaultTenantContext() {
 if (process.env.NODE_ENV !== 'production') {
   setDefaultTenantContext();
 }
+
+export class TenantContext {
+  tenantId: string;
+  userId: string;
+  requestId: string;
+
+  constructor(tenantId: string, userId: string, requestId: string = '') {
+    this.tenantId = tenantId;
+    this.userId = userId;
+    this.requestId = requestId;
+  }
+}
+
+export function setTenantContext(context: TenantContext): void {
+  // In real implementation, this would set the context in AsyncLocalStorage for the current call chain
+  console.log(`Setting tenant context: ${context.tenantId}, user: ${context.userId}`);
+}
+
+// Add aliases for compatibility with existing tests
+export const getCurrentTenantContext = getTenantContext;
+export const setCurrentTenantContext = setTenantContext;
+export { tenantContextStorage };

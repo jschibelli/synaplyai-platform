@@ -1,5 +1,5 @@
 import { ContextProvider, DocumentRepository, Document } from '../../src/ai/ContextProvider';
-import { getTenantContext } from '../../src/lib/tenantContext';
+import { getTenantContext } from '../../src/lib/tenant-context';
 import { AICommandContextParameters } from './AICommandRegistry';
 
 // Mock dependencies

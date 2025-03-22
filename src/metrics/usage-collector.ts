@@ -1,6 +1,21 @@
-// src/metrics/usage-collector.ts
+/**
+ * @deprecated This file is deprecated. Please use EnhancedMetricsCollector from './metrics-collector.ts' instead.
+ * 
+ * Example migration:
+ * ```
+ * // Old usage
+ * const collector = new MetricsCollector(redisClient);
+ * await collector.trackLatency('operation', 100);
+ * 
+ * // New usage
+ * const collector = new EnhancedMetricsCollector(redisMetricsClient);
+ * collector.setRedisInstance(redisClient);
+ * await collector.trackDetailedLatency('operation', 100);
+ * ```
+ */
+
 import { Redis } from 'ioredis';
-import { getCurrentTenantId } from '../lib/tenantContext';
+import { getCurrentTenantId } from '../lib/tenant-context';
 
 interface MetricsBucket {
   count: number;
@@ -10,14 +25,19 @@ interface MetricsBucket {
   p95: number;
 }
 
+/**
+ * @deprecated Use EnhancedMetricsCollector from './metrics-collector.ts' instead
+ */
 export class MetricsCollector {
   private redis: Redis;
   
   constructor(redis: Redis) {
     this.redis = redis;
+    console.warn("MetricsCollector from usage-collector.ts is deprecated. Please use EnhancedMetricsCollector from metrics-collector.ts");
   }
 
   async trackLatency(operation: string, duration: number): Promise<void> {
+    console.warn("trackLatency is deprecated. Please use trackDetailedLatency from EnhancedMetricsCollector");
     const tenantId = getCurrentTenantId();
     const minute = Math.floor(Date.now() / 60000);
     
@@ -32,6 +52,7 @@ export class MetricsCollector {
   }
 
   async getP95Latency(operation: string, minutes: number = 5): Promise<number> {
+    console.warn("getP95Latency is deprecated. Please use getP95Latency from EnhancedMetricsCollector");
     const tenantId = getCurrentTenantId();
     const now = Date.now();
     const windowStart = now - (minutes * 60000);
@@ -48,7 +69,15 @@ export class MetricsCollector {
   }
 }
 
+/**
+ * @deprecated Use EnhancedMetricsCollector from './metrics-collector.ts' instead
+ */
 export class EnhancedMetricsCollector extends MetricsCollector {
+  constructor(redis: Redis) {
+    super(redis);
+    console.warn("EnhancedMetricsCollector from usage-collector.ts is deprecated. Please use EnhancedMetricsCollector from metrics-collector.ts");
+  }
+
   async trackDetailedLatency(operation: string, duration: number): Promise<void> {
     const tenantId = getCurrentTenantId();
     const minute = Math.floor(Date.now() / 60000);

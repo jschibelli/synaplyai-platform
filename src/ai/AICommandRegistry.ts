@@ -1,5 +1,5 @@
 import { CommandHandler, CommandRegistry } from "../commands/CommandRegistry";
-import { getTenantContext } from "../lib/tenantContext";
+import { getTenantContext } from "../lib/tenant-context";
 import { estimateCommandTokens, trackTokenUsage } from "./tokenUtils";
 import { DocumentContext } from './ContextProvider'; // Import only DocumentContext
 import { AIService } from './AIService';
@@ -51,6 +51,9 @@ export interface AIAnalysisResult {
   metadata?: Record<string, any>;
 }
 
+/**
+ * AI Command options and configuration
+ */
 export interface AICommandOptions {
   type: string;
   requiresAIAnalysis: boolean;
@@ -59,6 +62,49 @@ export interface AICommandOptions {
     retries: number;
     priority: 'high' | 'normal' | 'low';
   };
+}
+
+/**
+ * AI Command context parameters for document context retrieval
+ */
+export interface AICommandContextParameters {
+  windowSize: number;
+  includePreceding: boolean;
+  includeFollowing: boolean;
+  includeDocument?: boolean;
+  includeMetadata?: boolean;
+  trackCollaborativeChanges?: boolean;
+  detectIntent?: boolean;
+  intentPriorities?: string[];
+}
+
+/**
+ * AI Command analysis parameters for AI processing
+ */
+export interface AICommandAnalysisParameters {
+  type: string;
+  model: string;
+  temperature?: number;
+  maxTokens?: number;
+  retryAttempts?: number;
+  retryDelay?: number;
+}
+
+/**
+ * Complete text command parameters
+ */
+export interface CompleteTextCommand {
+  type: 'COMPLETE_TEXT';
+  documentId: string;
+  userId: string;
+  position: number;
+  prompt?: string;
+  contextParameters?: AICommandContextParameters;
+  analysisParameters?: AICommandAnalysisParameters;
+  parameters?: Record<string, any>;
+  requiresAIAnalysis: boolean;
+  transformations?: string[];
+  stateRecovery?: boolean;
 }
 
 /**

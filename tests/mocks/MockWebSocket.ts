@@ -5,50 +5,38 @@ export const MockWebSocket = {
   listeners: {},
   messages: [],
   
-  on(event: string, callback: Function) {
+  on(event: string, callback: Function): void {
     if (!this.listeners[event]) {
       this.listeners[event] = [];
     }
     this.listeners[event].push(callback);
   },
   
-  off(event: string) {
+  off(event: string): void {
     delete this.listeners[event];
   },
   
-  emit(event: string, data: any) {
-    this.messages.push({
-      type: event,
-      ...data
-    });
-  },
-  
-  triggerMessage(message: string) {
-    const data = JSON.parse(message);
-    const event = data.type;
-    
+  emit(event: string, data: any): void {
     if (this.listeners[event]) {
       this.listeners[event].forEach(callback => callback(data));
     }
   },
   
-  reset() {
+  triggerMessage(message: string): void {
+    this.messages.push(message);
+    this.emit('message', message);
+  },
+  
+  reset(): void {
     this.listeners = {};
     this.messages = [];
   },
   
-  simulateReconnection() {
-    if (this.listeners['reconnect']) {
-      this.listeners['reconnect'].forEach(callback => callback());
-    }
+  simulateReconnection(): void {
+    this.emit('open', {});
   }
 };
 
-// Provider component for testing
-export const MockWebSocketProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
-  return (
-    <div data-testid="mock-websocket-provider">
-      {children}
-    </div>
-  );
-};
+export function MockWebSocketProvider({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}
