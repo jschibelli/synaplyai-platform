@@ -17,18 +17,15 @@ interface RedisMetricsClient {
 }
 
 export interface IMetricsCollector {
+  // Common methods used across the codebase
   increment(metricName: string, tenantId: string, value?: number): Promise<void>;
-  recordLatency(metricName: string, latencyMs: number, tenantId: string): Promise<void>;
-  getPercentileLatency(metricName: string, tenantId: string, percentile: number): Promise<number | null>;
-  setCircuitBreakerState(tenantId: string, serviceName: string, state: CircuitState): Promise<void>;
+  recordLatency(metricName: string, latencyMs: number, tenantId?: string): Promise<void>;
+  recordValue(metricName: string, value: number, tenantId?: string): Promise<void>;
+  
+  // Circuit breaker methods
+  setCircuitBreakerState(tenantId: string, serviceName: string, state: string | CircuitState): Promise<void>;
   incrementCircuitBreakerFailures(tenantId: string, serviceName: string): Promise<void>;
   incrementCircuitBreakerRejections(tenantId: string, serviceName: string): Promise<void>;
-  getCircuitBreakerState(tenantId: string, serviceName: string): Promise<CircuitState | null>;
-  incrementFilterResult(filterName: string, result: ContentFilterResult): Promise<void>;
-  recordFilterLatency(filterName: string, latencyMs: number): Promise<void>;
-  recordPipelineLatency(latencyMs: number): Promise<void>;
-  incrementPipelineResult(result: ContentFilterResult): Promise<void>;
-  incrementPipelineErrors(): Promise<void>;
 }
 
 export class MetricsCollector implements IMetricsCollector {
@@ -48,8 +45,10 @@ export class MetricsCollector implements IMetricsCollector {
     return await this.redisClient.getPercentileLatency(metricName, tenantId, percentile, 5);
   }
 
-  async setCircuitBreakerState(tenantId: string, serviceName: string, state: CircuitState): Promise<void> {
-    await this.increment(`circuit.state.${state.toLowerCase()}`, tenantId);
+  async setCircuitBreakerState(tenantId: string, serviceName: string, state: string | CircuitState): Promise<void> {
+    // Convert state to lowercase string if it's not already
+    const stateStr = typeof state === 'string' ? state.toLowerCase() : state.toLowerCase();
+    await this.increment(`circuit.state.${stateStr}`, tenantId);
     // Add a null check for optional redisClient methods
     if (this.redisClient.setCircuitBreakerState) {
       await this.redisClient.setCircuitBreakerState(tenantId, serviceName, state);

@@ -6,15 +6,15 @@ import { v4 as uuidv4 } from 'uuid';
  */
 export interface TenantContext {
   tenantId: string;
-  userId?: string;
-  roles?: string[];
-  features?: Record<string, boolean>;
-  requestId?: string;
+  userId: string;
   traceId?: string;
+  requestId: string;
+  features?: Record<string, boolean>;
+  roles?: string[];
   [key: string]: any;
 }
 
-// Create AsyncLocalStorage for tenant context
+// Create a singleton instance of AsyncLocalStorage for tenant context
 const tenantContextStorage = new AsyncLocalStorage<TenantContext>();
 
 /**
@@ -24,6 +24,8 @@ export function createTenantContext(tenantId: string, userId: string, additional
   return {
     tenantId,
     userId,
+    requestId: additionalContext.requestId || `req-${uuidv4()}`, // Ensure requestId exists
+    traceId: additionalContext.traceId || `trace-${uuidv4()}`,
     ...additionalContext
   };
 }
@@ -131,21 +133,22 @@ if (process.env.NODE_ENV !== 'production') {
   setDefaultTenantContext();
 }
 
-export class TenantContext {
-  tenantId: string;
-  userId: string;
-  requestId: string;
-
-  constructor(tenantId: string, userId: string, requestId: string = '') {
-    this.tenantId = tenantId;
-    this.userId = userId;
-    this.requestId = requestId;
-  }
+/**
+ * Create a minimal default tenant context with required fields
+ */
+export function createDefaultTenantContext(tenantId: string): TenantContext {
+  return {
+    tenantId,
+    userId: 'system',
+    requestId: `auto-${Date.now()}`, // Generate a requestId to satisfy the interface
+    traceId: undefined
+  };
 }
 
-export function setTenantContext(context: TenantContext): void {
-  // In real implementation, this would set the context in AsyncLocalStorage for the current call chain
-  console.log(`Setting tenant context: ${context.tenantId}, user: ${context.userId}`);
+// Export a clear function for testing
+export function clearTenantContext(): void {
+  // AsyncLocalStorage doesn't have a direct way to clear context
+  tenantContextStorage.enterWith(undefined as any);
 }
 
 // Add aliases for compatibility with existing tests

@@ -1,4 +1,5 @@
 import { getTenantContext } from './tenant-context';
+import { MetricsCollector } from './metrics/metrics-interface';
 
 /**
  * Circuit breaker states
@@ -8,6 +9,9 @@ export enum CircuitState {
   OPEN = 'OPEN',         // Failing, all requests rejected
   HALF_OPEN = 'HALF_OPEN' // Testing if service recovered
 }
+
+// Add type compatibility for string values
+export type CircuitStateType = CircuitState | 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
 /**
  * Circuit breaker state
@@ -66,7 +70,8 @@ export class CircuitBreaker {
   
   constructor(
     private serviceName: string,
-    options: Partial<CircuitBreakerOptions> = {}
+    options: Partial<CircuitBreakerOptions> = {},
+    private metricsCollector?: MetricsCollector
   ) {
     this.options = {
       failureThreshold: options.failureThreshold || 5,
