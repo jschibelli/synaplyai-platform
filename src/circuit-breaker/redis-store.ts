@@ -91,4 +91,13 @@ export class RedisCircuitBreakerStore implements CircuitBreakerStore {
     }
     return result;
   }
+
+  // Add getBreaker method to RedisCircuitBreakerStore
+  async getBreaker(tenantId: string, serviceName: string): Promise<CircuitBreaker> {
+    // Implementation to get or create a circuit breaker
+    return new CircuitBreaker({
+      failureThreshold: 3,
+      resetTimeout: 30000
+    });
+  }
 }

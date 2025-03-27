@@ -21,6 +21,17 @@ import { documentRepository } from '../../../src/documents/documentRepository';
 import { testDocumentId, testUserId } from '../../../src/test/constants';
 import { executeCompleteTextCommand } from '../../../src/commands/executeCompleteTextCommand';
 import { PERFORMANCE_THRESHOLDS } from '../../../src/test/constants';
+import { 
+  CompleteTextCommand, 
+  RewriteTextCommand,
+  GrammarCheckCommand,
+  AIAnalysisResult
+} from '../../../src/tests/test-interfaces';
+import { 
+  createCompleteTextCommand,
+  createRewriteTextCommand,
+  createCompleteAnalysisResult
+} from '../../../src/tests/test-helpers';
 
 // Mock dependencies
 jest.mock('../../../src/lib/tenant-context');
@@ -185,25 +196,17 @@ describe('AI Command Integration Flow', () => {
     // Register commands
     await registerAICommands(aiCommandRegistry);
     
-    const command: CompleteTextCommand = {
-      type: 'COMPLETE_TEXT',
+    const completeTextCommand = createCompleteTextCommand({
       documentId: testDocumentId,
       userId: testUserId,
-      position: 120,
       prompt: 'Complete this paragraph',
       contextParameters: {
         windowSize: 200,
         includePreceding: true,
-        includeFollowing: false
-      },
-      analysisParameters: {
-        type: 'COMPLETE_TEXT',
-        model: 'gpt-4',
-        temperature: 0.7,
-        maxTokens: 100
-      },
-      requiresAIAnalysis: true
-    };
+        includeFollowing: false,
+        includeDocument: true // Always include this
+      }
+    });
   
     const handler = CommandRegistry.register.mock.calls.find(
       (call: any) => call[0] === 'COMPLETE_TEXT'
@@ -215,25 +218,17 @@ describe('AI Command Integration Flow', () => {
   async function executeAICommand(): Promise<void> {
     await registerAICommands(aiCommandRegistry);
     
-    const command: CompleteTextCommand = {
-      type: 'COMPLETE_TEXT',
+    const completeTextCommand = createCompleteTextCommand({
       documentId: testDocumentId,
       userId: testUserId,
-      position: 120,
       prompt: 'Test command',
       contextParameters: {
         windowSize: 200,
         includePreceding: true,
-        includeFollowing: false
-      },
-      analysisParameters: {
-        type: 'COMPLETE_TEXT',
-        model: 'gpt-4',
-        temperature: 0.7,
-        maxTokens: 100
-      },
-      requiresAIAnalysis: true
-    };
+        includeFollowing: false,
+        includeDocument: true // Always include this
+      }
+    });
   
     const handler = CommandRegistry.register.mock.calls.find(
       (call: any) => call[0] === 'COMPLETE_TEXT'
@@ -279,25 +274,17 @@ describe('AI Command Integration Flow', () => {
       await registerAICommands(aiCommandRegistry);
       
       // Create a text completion command
-      const completeTextCommand: CompleteTextCommand = {
-        type: 'COMPLETE_TEXT',
+      const completeTextCommand = createCompleteTextCommand({
         documentId: testDocumentId,
         userId: testUserId,
-        position: 120, // Position in document for completion
         prompt: 'Complete this paragraph naturally',
         contextParameters: {
           windowSize: 200,
           includePreceding: true,
-          includeFollowing: false
-        },
-        analysisParameters: {
-          type: 'COMPLETE_TEXT',
-          model: 'gpt-4',
-          temperature: 0.7,
-          maxTokens: 100
-        },
-        requiresAIAnalysis: true
-      };
+          includeFollowing: false,
+          includeDocument: true // Always include this
+        }
+      });
       
       // Get the registered handler
       const commandHandler = CommandRegistry.register.mock.calls.find(
@@ -506,25 +493,17 @@ describe('AI Command Integration Flow', () => {
       mockAIProvider.getCompletion.mockRejectedValue(new Error('AI service unavailable'));
       
       // Create a completion command
-      const completeTextCommand: CompleteTextCommand = {
-        type: 'COMPLETE_TEXT',
+      const completeTextCommand = createCompleteTextCommand({
         documentId: testDocumentId,
         userId: testUserId,
-        position: 120,
         prompt: 'Complete this paragraph',
         contextParameters: {
           windowSize: 200,
           includePreceding: true,
-          includeFollowing: false
-        },
-        analysisParameters: {
-          type: 'COMPLETE_TEXT',
-          model: 'gpt-4',
-          temperature: 0.7,
-          maxTokens: 100
-        },
-        requiresAIAnalysis: true
-      };
+          includeFollowing: false,
+          includeDocument: true // Always include this
+        }
+      });
       
       // Get the registered handler
       const commandHandler = CommandRegistry.register.mock.calls.find(
@@ -594,25 +573,17 @@ describe('AI Command Integration Flow', () => {
       await registerAICommands(aiCommandRegistry);
       
       // Create a simple command
-      const completeTextCommand: CompleteTextCommand = {
-        type: 'COMPLETE_TEXT',
+      const completeTextCommand = createCompleteTextCommand({
         documentId: testDocumentId,
         userId: testUserId,
-        position: 120,
         prompt: 'Complete this paragraph',
         contextParameters: {
           windowSize: 200,
           includePreceding: true,
-          includeFollowing: false
-        },
-        analysisParameters: {
-          type: 'COMPLETE_TEXT',
-          model: 'gpt-4',
-          temperature: 0.7,
-          maxTokens: 100
-        },
-        requiresAIAnalysis: true
-      };
+          includeFollowing: false,
+          includeDocument: true // Always include this
+        }
+      });
       
       // Get the registered handler
       const commandHandler = CommandRegistry.register.mock.calls.find(

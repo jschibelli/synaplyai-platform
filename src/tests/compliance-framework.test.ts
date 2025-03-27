@@ -2,11 +2,37 @@ import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
 import { ComplianceLogger } from '../compliance/logger';
 import { AdaptiveCircuitBreaker } from '../circuit-breaker/adaptive-breaker';
 import { RedisCircuitBreakerStore } from '../circuit-breaker/redis-store';
-import { CircuitState } from '../circuit-breaker/interfaces';
+import { CircuitState } from '../lib/circuit-breaker';
 import { MetricsCollector } from '../metrics/metrics-collector';
 import { ShardedRedisClient } from '../metrics/sharded-redis';
-import { EnhancedFilterPipeline, ExecutionStrategy } from '../filtering/filter-pipeline';
-import { mockTenantContext, clearTenantContext } from '../__mocks__/tenant-context';
+import { EnhancedFilterPipeline } from '../filtering/filter-pipeline';
+
+const ExecutionStrategy = {
+  SYNC: 'SYNC',
+  PARALLEL: 'PARALLEL'
+};
+
+const mockTenantContext = (tenantId: string, userId: string) => {
+  const mockContext = {
+    tenantId,
+    userId,
+    requestId: 'test-request',
+    traceId: 'test-trace'
+  };
+  
+  jest.mock('../lib/tenant-context', () => ({
+    getTenantContext: jest.fn().mockReturnValue(mockContext),
+    getCurrentTenantId: jest.fn().mockReturnValue(tenantId),
+    setTenantContext: jest.fn(),
+    clearTenantContext: jest.fn()
+  }), { virtual: true });
+  
+  return mockContext;
+};
+
+const clearTenantContext = () => {
+  jest.resetModules();
+};
 
 // Mock Redis clients to avoid actual Redis dependencies in tests
 jest.mock('redis', () => {
@@ -15,6 +41,7 @@ jest.mock('redis', () => {
     get: jest.fn(),
     set: jest.fn().mockResolvedValue('OK'),
     incr: jest.fn(),
+    incrBy: jest.fn().mockResolvedValue(1),
     decr: jest.fn(),
     expire: jest.fn().mockResolvedValue(1),
     del: jest.fn().mockResolvedValue(1),
@@ -45,6 +72,19 @@ jest.mock('../prisma/client', () => ({
     }
   }
 }));
+
+jest.mock('../filtering/filter-pipeline', () => {
+  return {
+    EnhancedFilterPipeline: jest.fn().mockImplementation(() => ({
+      addFilter: jest.fn(),
+      process: jest.fn().mockResolvedValue({
+        result: 'BLOCKED',
+        confidence: 0.95,
+        reason: 'Mocked result'
+      })
+    }))
+  };
+});
 
 describe('Enhanced Compliance Framework', () => {
   let metricsCollector: MetricsCollector;

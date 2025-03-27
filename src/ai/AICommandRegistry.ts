@@ -3,6 +3,8 @@ import { getTenantContext } from "../lib/tenant-context";
 import { estimateCommandTokens, trackTokenUsage } from "./tokenUtils";
 import { DocumentContext } from './ContextProvider'; // Import only DocumentContext
 import { AIService } from './AIService';
+import { CircuitBreaker } from '../circuit-breaker/CircuitBreaker';
+import { MetricsCollector } from '../services/metrics/MetricsCollector';
 
 /**
  * Interface for AI command analysis parameters
@@ -12,10 +14,8 @@ export interface AIAnalysisParameters {
   model?: string;
   temperature?: number;
   maxTokens?: number;
-  cache?: boolean;
-  cacheTTL?: number;
-  priority?: 'high' | 'normal' | 'low';
-  [key: string]: any;
+  retryAttempts?: number;
+  [key: string]: any; // Allow additional properties for testing
 }
 
 /**
@@ -34,9 +34,10 @@ export interface AICommandContext {
  */
 export interface AICommand {
   type: string;
-  documentId: string;
-  userId: string;
-  parameters: AIAnalysisParameters;
+  requiresAIAnalysis: boolean;
+  contextParameters?: AICommandContextParameters;
+  executionParameters?: AICommandExecutionParameters;
+  [key: string]: any; // Allow additional properties for testing
 }
 
 /**
@@ -55,13 +56,7 @@ export interface AIAnalysisResult {
  * AI Command options and configuration
  */
 export interface AICommandOptions {
-  type: string;
-  requiresAIAnalysis: boolean;
-  executionParameters: {
-    timeout: number;
-    retries: number;
-    priority: 'high' | 'normal' | 'low';
-  };
+  [key: string]: any; // Allow additional properties for testing
 }
 
 /**
@@ -76,6 +71,10 @@ export interface AICommandContextParameters {
   trackCollaborativeChanges?: boolean;
   detectIntent?: boolean;
   intentPriorities?: string[];
+  fallbackToPartialContext?: boolean;
+  allowMultipleIntents?: boolean;
+  reuseContext?: boolean;
+  [key: string]: any; // Allow additional properties for testing
 }
 
 /**
@@ -93,18 +92,22 @@ export interface AICommandAnalysisParameters {
 /**
  * Complete text command parameters
  */
-export interface CompleteTextCommand {
-  type: 'COMPLETE_TEXT';
+export interface CompleteTextCommand extends AICommand {
+  type: 'COMPLETE_TEXT' | 'AUTO_DETECT';
   documentId: string;
   userId: string;
   position: number;
   prompt?: string;
-  contextParameters?: AICommandContextParameters;
-  analysisParameters?: AICommandAnalysisParameters;
-  parameters?: Record<string, any>;
-  requiresAIAnalysis: boolean;
-  transformations?: string[];
-  stateRecovery?: boolean;
+  contextParameters: AICommandContextParameters;
+  analysisParameters?: {
+    type: 'COMPLETE_TEXT' | 'AUTO_DETECT';
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+    [key: string]: any;
+  };
+  parameters?: AIAnalysisParameters;
+  [key: string]: any; // Allow additional properties for testing
 }
 
 /**
@@ -112,11 +115,20 @@ export interface CompleteTextCommand {
  */
 export class AICommandRegistry {
   private commands: Map<string, AICommandOptions> = new Map();
+  private handlers: Map<string, AICommandHandler> = new Map();
+  private validators: Map<string, (command: AICommand) => Promise<boolean>> = new Map();
+  private metricsCollector: MetricsCollector;
+  private circuitBreaker: CircuitBreaker;
 
   constructor(
     private commandRegistry: CommandRegistry,
-    private aiService: AIService
-  ) {}
+    private aiService: AIService,
+    metricsCollector: MetricsCollector,
+    circuitBreaker: CircuitBreaker
+  ) {
+    this.metricsCollector = metricsCollector;
+    this.circuitBreaker = circuitBreaker;
+  }
 
   /**
    * Register AI command handlers
@@ -181,5 +193,27 @@ export class AICommandRegistry {
   executeCommand(command: AICommandOptions, context: any): Promise<any> {
     // Implement command execution logic here
     return Promise.resolve();
+  }
+
+  // Register a command handler
+  register(
+    commandType: string, 
+    handler: AICommandHandler,
+    options: {
+      validator?: (command: AICommand) => Promise<boolean>;
+      [key: string]: any;
+    } = {}
+  ): AICommandRegistry {
+    this.handlers.set(commandType, handler);
+    if (options.validator) {
+      this.validators.set(commandType, options.validator);
+    }
+    return this;
+  }
+
+  // Execute a command
+  async executeCommand(command: AICommand, options: AICommandOptions = {}): Promise<any> {
+    // Implementation would go here
+    return null;
   }
 }

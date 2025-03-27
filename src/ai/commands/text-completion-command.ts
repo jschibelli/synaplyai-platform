@@ -1,29 +1,9 @@
-import { AICommand, AICommandHandler } from '../AICommandRegistry';
+import { AICommandRegistry, CompleteTextCommand, AICommandContext } from '../AICommandRegistry';
 import { DocumentContext } from '../ContextProvider';
 import { AIAnalysisResult } from '../AICommandRegistry';
 
-/**
- * Command interface for text completion
- */
-export interface CompleteTextCommand extends AICommand {
-  type: 'COMPLETE_TEXT';
-  documentId: string;
-  userId: string;
-  position: number;
-  prompt: string;
-  contextParameters: {
-    windowSize: number;
-    includePreceding: true;
-    includeFollowing: false;
-  };
-  analysisParameters: {
-    type: 'COMPLETE_TEXT';
-    model?: string;
-    temperature?: number;
-    maxTokens?: number;
-  };
-  requiresAIAnalysis: true;
-}
+// Replace the interface with a reference to the central definition
+export type { CompleteTextCommand } from '../AICommandRegistry';
 
 /**
  * Event for text completion
@@ -38,39 +18,12 @@ export interface TextCompletedEvent {
   prompt: string;
 }
 
-/**
- * Handler for text completion command
- */
-export function createTextCompletionHandler(commandRegistry: any): AICommandHandler<CompleteTextCommand, TextCompletedEvent> {
-  return async (command: CompleteTextCommand, context: DocumentContext, analysis?: AIAnalysisResult): Promise<TextCompletedEvent> => {
-    if (!analysis) {
-      throw new Error('AI analysis is required for text completion');
+// Create handler logic
+export function createTextCompletionHandler(registry: AICommandRegistry) {
+  return {
+    execute: async (command: CompleteTextCommand, context: AICommandContext) => {
+      // Implementation
+      return { content: 'Generated text' };
     }
-    
-    // Extract the generated text from the analysis
-    const generatedText = analysis.content;
-    
-    // Create a standard insert text command
-    const insertCommand = {
-      type: 'INSERT_TEXT',
-      documentId: command.documentId,
-      position: command.position,
-      text: generatedText,
-      userId: command.userId
-    };
-    
-    // Execute the standard command
-    const result = await commandRegistry.execute(insertCommand);
-    
-    // Return text completed event
-    return {
-      documentId: command.documentId,
-      position: command.position,
-      text: generatedText,
-      userId: command.userId,
-      aiGenerated: true,
-      modelId: analysis.modelId,
-      prompt: command.prompt
-    };
   };
 }

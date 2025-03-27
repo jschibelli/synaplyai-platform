@@ -1,17 +1,6 @@
-import { CircuitState } from './interfaces';
-import { MetricsCollector } from '../metrics/metrics-collector';
+import { CircuitState, CircuitBreakerOptions, CircuitBreakerStore, MetricsCollector } from '../types/shared-interfaces';
 
-export enum CircuitState {
-  CLOSED = 'CLOSED',
-  OPEN = 'OPEN',
-  HALF_OPEN = 'HALF_OPEN',
-}
-
-export interface CircuitBreakerOptions {
-  failureThreshold: number;
-  resetTimeout: number;
-  successThreshold?: number;
-}
+export { CircuitState }; // Re-export for compatibility
 
 export class CircuitBreaker {
   private state: CircuitState = CircuitState.CLOSED;

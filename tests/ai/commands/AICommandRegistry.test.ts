@@ -8,7 +8,7 @@ describe('AICommandRegistry', () => {
   let aiCommandRegistry: AICommandRegistry;
   let mockTenantContext: jest.Mocked<TenantContext>;
   let mockMetricsCollector: jest.Mocked<MetricsCollector>;
-  let mockCircuitBreakerStore: jest.Mocked<CircuitBreakerStore>;
+  let mockCircuitBreakerStore: jest.Mocked<RedisCircuitBreakerStore>;
   let mockCircuitBreaker: jest.Mocked<CircuitBreaker>;
 
   beforeEach(() => {
@@ -22,9 +22,15 @@ describe('AICommandRegistry', () => {
       getCurrentTenant: jest.fn().mockReturnValue('test-tenant-1')
     } as any;
 
+    // FIX: Use consistent interface for metrics collector
     mockMetricsCollector = {
+      increment: jest.fn().mockResolvedValue(undefined),
+      recordLatency: jest.fn().mockResolvedValue(undefined),
       recordValue: jest.fn().mockResolvedValue(undefined),
-      increment: jest.fn().mockResolvedValue(undefined)
+      track: jest.fn().mockResolvedValue(undefined),
+      setCircuitBreakerState: jest.fn().mockResolvedValue(undefined),
+      incrementCircuitBreakerFailures: jest.fn().mockResolvedValue(undefined),
+      incrementCircuitBreakerRejections: jest.fn().mockResolvedValue(undefined)
     } as any;
 
     mockCircuitBreakerStore = {
@@ -114,7 +120,8 @@ describe('AICommandRegistry', () => {
         aiCommandRegistry.executeCommand(command, {})
       ).rejects.toThrow('Test error');
 
-      expect(mockMetricsCollector.increment).toHaveBeenCalledWith(
+      // FIX: Use proper property and method checks
+      expect(mockMetricsCollector.track).toHaveBeenCalledWith(
         'ai.command.TEST_COMMAND.error',
         expect.objectContaining({
           tenantId: 'test-tenant-1',
@@ -178,7 +185,8 @@ describe('AICommandRegistry', () => {
         aiCommandRegistry.executeCommand(command, {})
       ).rejects.toThrow('Command execution timeout');
 
-      expect(mockMetricsCollector.increment).toHaveBeenCalledWith(
+      // FIX: Use proper property and method checks
+      expect(mockMetricsCollector.track).toHaveBeenCalledWith(
         'ai.command.timeout',
         expect.objectContaining({
           tenantId: 'test-tenant-1',
@@ -207,7 +215,8 @@ describe('AICommandRegistry', () => {
       ).rejects.toThrow('Circuit breaker is open');
 
       expect(handler).not.toHaveBeenCalled();
-      expect(mockMetricsCollector.increment).toHaveBeenCalledWith(
+      // FIX: Use proper property and method checks
+      expect(mockMetricsCollector.track).toHaveBeenCalledWith(
         'circuit_breaker.rejection',
         expect.objectContaining({
           tenantId: 'test-tenant-1',
@@ -242,7 +251,8 @@ describe('AICommandRegistry', () => {
         aiCommandRegistry.executeCommand(command, {})
       ).rejects.toThrow('Rate limit exceeded');
 
-      expect(mockMetricsCollector.increment).toHaveBeenCalledWith(
+      // FIX: Use proper property and method checks
+      expect(mockMetricsCollector.track).toHaveBeenCalledWith(
         'rate_limit.exceeded',
         expect.objectContaining({
           tenantId: 'test-tenant-1',
@@ -334,7 +344,8 @@ describe('AICommandRegistry', () => {
       expect(results[1].status).toBe('rejected');
       expect(results[2].status).toBe('fulfilled');
 
-      expect(mockMetricsCollector.increment).toHaveBeenCalledWith(
+      // FIX: Use proper property and method checks
+      expect(mockMetricsCollector.track).toHaveBeenCalledWith(
         'ai.command.parallel.error',
         expect.objectContaining({
           tenantId: 'test-tenant-1',
@@ -385,7 +396,8 @@ describe('AICommandRegistry', () => {
 
       expect(result).toBe('success');
       expect(cleanup).toHaveBeenCalled();
-      expect(mockMetricsCollector.increment).toHaveBeenCalledWith(
+      // FIX: Use proper property and method checks
+      expect(mockMetricsCollector.track).toHaveBeenCalledWith(
         'ai.command.cleanup.error',
         expect.objectContaining({
           tenantId: 'test-tenant-1',
@@ -511,7 +523,8 @@ describe('AICommandRegistry', () => {
 
       expect(result).toBe('success');
       expect(handler).toHaveBeenCalledTimes(3);
-      expect(mockMetricsCollector.increment).toHaveBeenCalledWith(
+      // FIX: Use proper property and method checks
+      expect(mockMetricsCollector.track).toHaveBeenCalledWith(
         'ai.command.retry',
         expect.objectContaining({
           tenantId: 'test-tenant-1',

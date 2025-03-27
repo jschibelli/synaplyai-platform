@@ -1,5 +1,4 @@
 import 'jest-environment-jsdom';
-// Now import jest-dom after Jest environment is set up
 
 // Mock implementations for browser APIs not available in Node.js
 global.ResizeObserver = class ResizeObserver {
@@ -8,7 +7,6 @@ global.ResizeObserver = class ResizeObserver {
   disconnect = jest.fn();
 };
 
-// Add other mock implementations
 global.IntersectionObserver = class IntersectionObserver {
   root: Element | null = null;
   rootMargin: string = '0px';
@@ -33,68 +31,126 @@ global.fetch = jest.fn(() =>
   })
 ) as jest.Mock;
 
-// Properly typed MockWebSocket class
-class MockWebSocket {
+// Complete WebSocket mock that extends EventTarget
+class MockWebSocket extends EventTarget {
+  // Standard WebSocket properties
   url: string;
-  readyState: number = 1; // OPEN
   binaryType: BinaryType = 'blob';
   bufferedAmount: number = 0;
   extensions: string = '';
   protocol: string = '';
-  onclose: ((this: WebSocket, ev: CloseEvent) => any) | null = null;
-  onerror: ((this: WebSocket, ev: Event) => any) | null = null;
-  onmessage: ((this: WebSocket, ev: MessageEvent) => any) | null = null;
-  onopen: ((this: WebSocket, ev: Event) => any) | null = null;
+  readyState: number = 0;
   
-  // Define as static readonly with literal types
+  // Event handlers with proper types
+  private _onclose: ((ev: CloseEvent) => any) | null = null;
+  private _onerror: ((ev: Event) => any) | null = null;
+  private _onmessage: ((ev: MessageEvent) => any) | null = null;
+  private _onopen: ((ev: Event) => any) | null = null;
+  
+  // Implement getters and setters for event handlers
+  get onclose(): ((this: WebSocket, ev: CloseEvent) => any) | null {
+    return this._onclose;
+  }
+  
+  set onclose(handler: ((this: WebSocket, ev: CloseEvent) => any) | null) {
+    this._onclose = handler;
+  }
+  
+  get onerror(): ((this: WebSocket, ev: Event) => any) | null {
+    return this._onerror;
+  }
+  
+  set onerror(handler: ((this: WebSocket, ev: Event) => any) | null) {
+    this._onerror = handler;
+  }
+  
+  get onmessage(): ((this: WebSocket, ev: MessageEvent) => any) | null {
+    return this._onmessage;
+  }
+  
+  set onmessage(handler: ((this: WebSocket, ev: MessageEvent) => any) | null) {
+    this._onmessage = handler;
+  }
+  
+  get onopen(): ((this: WebSocket, ev: Event) => any) | null {
+    return this._onopen;
+  }
+  
+  set onopen(handler: ((this: WebSocket, ev: Event) => any) | null) {
+    this._onopen = handler;
+  }
+  
+  // WebSocket constants
   static readonly CONNECTING = 0;
   static readonly OPEN = 1;  
   static readonly CLOSING = 2;
   static readonly CLOSED = 3;
   
-  // Define instance properties with literal types
   readonly CONNECTING = 0;
   readonly OPEN = 1;
   readonly CLOSING = 2;
   readonly CLOSED = 3;
 
   constructor(url: string, protocols?: string | string[]) {
+    super(); // Initialize EventTarget
     this.url = url;
+    this.readyState = MockWebSocket.CONNECTING;
+    
     setTimeout(() => {
-      if (this.onopen) {
-        // Create an Event rather than passing empty object
-        const event = new Event('open') as Event;
-        (this.onopen as any).call(this, event);
+      this.readyState = MockWebSocket.OPEN;
+      if (this._onopen) {
+        const event = new Event('open');
+        // Dispatch to the EventTarget and call the handler directly
+        this.dispatchEvent(event);
+        this._onopen.call(this as unknown as WebSocket, event);
       }
     }, 0);
   }
-  
-  send = jest.fn();
-  close = jest.fn();
-  
-  addEventListener(type: string, listener: EventListener, options?: boolean | AddEventListenerOptions): void {
-    if (type === 'open') this.onopen = listener as any;
-    if (type === 'message') this.onmessage = listener as any;
-    if (type === 'error') this.onerror = listener as any;
-    if (type === 'close') this.onclose = listener as any;
-  }
-  
-  removeEventListener(type: string, listener: EventListener, options?: boolean | EventListenerOptions): void {
-    if (type === 'open' && this.onopen === listener) this.onopen = null;
-    if (type === 'message' && this.onmessage === listener) this.onmessage = null;
-    if (type === 'error' && this.onerror === listener) this.onerror = null;
-    if (type === 'close' && this.onclose === listener) this.onclose = null;
-  }
 
-  dispatchEvent(event: Event): boolean {
-    return true;
+  // WebSocket methods
+  send = jest.fn();
+  close = jest.fn(() => {
+    this.readyState = MockWebSocket.CLOSING;
+    setTimeout(() => {
+      this.readyState = MockWebSocket.CLOSED;
+      if (this._onclose) {
+        const event = new CloseEvent('close');
+        this.dispatchEvent(event);
+        this._onclose.call(this as unknown as WebSocket, event);
+      }
+    }, 0);
+  });
+  
+  // Helper methods for tests
+  triggerMessage(data: any) {
+    if (this._onmessage) {
+      const event = new MessageEvent('message', { data });
+      this.dispatchEvent(event);
+      this._onmessage.call(this as unknown as WebSocket, event);
+    }
+  }
+  
+  triggerClose(code = 1000, reason = '') {
+    if (this._onclose) {
+      const event = new CloseEvent('close', { code, reason, wasClean: true });
+      this.dispatchEvent(event);
+      this._onclose.call(this as unknown as WebSocket, event);
+    }
+  }
+  
+  triggerError() {
+    if (this._onerror) {
+      const event = new Event('error');
+      this.dispatchEvent(event);
+      this._onerror.call(this as unknown as WebSocket, event);
+    }
   }
 }
 
-// Mock WebSocket
-global.WebSocket = MockWebSocket as any;
+// Assign to global - use type casting to ensure correct type
+global.WebSocket = MockWebSocket as unknown as typeof WebSocket;
 
-// Mock web crypto for UUID generation
+// Rest of your jest.setup-env.ts file...
 Object.defineProperty(global, 'crypto', {
   value: {
     getRandomValues: (arr: Uint8Array) => {

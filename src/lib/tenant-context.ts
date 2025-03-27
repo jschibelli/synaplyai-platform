@@ -2,19 +2,18 @@ import { AsyncLocalStorage } from 'async_hooks';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
- * Interface for tenant context
+ * Tenant context information
  */
 export interface TenantContext {
   tenantId: string;
-  userId?: string;
-  roles?: string[];
-  features?: Record<string, boolean>;
-  requestId?: string;
+  userId?: string;        // Keep optional for flexibility
   traceId?: string;
-  [key: string]: any;
+  requestId?: string;
+  sessionId?: string;
+  [key: string]: any;     // Allow additional properties
 }
 
-// Create AsyncLocalStorage for tenant context
+// Store tenant context in AsyncLocalStorage
 const tenantContextStorage = new AsyncLocalStorage<TenantContext>();
 
 /**
@@ -43,10 +42,42 @@ export async function runWithTenantContextAsync<T>(tenantContext: TenantContext,
 }
 
 /**
- * Get the current tenant context
+ * Get the current tenant ID from context
+ */
+export function getCurrentTenantId(): string | undefined {
+  const context = tenantContextStorage.getStore();
+  return context?.tenantId;
+}
+
+/**
+ * Get the current user ID from context
+ */
+export function getCurrentUserId(): string | undefined {
+  const context = tenantContextStorage.getStore();
+  return context?.userId;
+}
+
+/**
+ * Get the complete tenant context
  */
 export function getTenantContext(): TenantContext | undefined {
   return tenantContextStorage.getStore();
+}
+
+/**
+ * Set tenant context for the current async scope
+ */
+export function setTenantContext(context: TenantContext): void {
+  tenantContextStorage.enterWith(context);
+}
+
+/**
+ * Clear the current tenant context
+ */
+export function clearTenantContext(): void {
+  // Note: AsyncLocalStorage doesn't have a direct way to clear context
+  // Setting an empty context is the closest equivalent
+  tenantContextStorage.enterWith({} as any);
 }
 
 /**
@@ -94,24 +125,19 @@ export function verifyTenantAccess(resourceTenantId: string): void {
 }
 
 /**
- * Helper to set the current tenant context
+ * Set the current tenant context with individual properties
  */
-export function setTenantContext(context: TenantContext): void {
-  tenantContextStorage.enterWith(context);
-}
-
-/**
- * Helper to get just the tenant ID
- */
-export function getCurrentTenantId(): string | undefined {
-  return getTenantContext()?.tenantId;
-}
-
-/**
- * Helper to get just the user ID
- */
-export function getCurrentUserId(): string | undefined {
-  return getTenantContext()?.userId;
+export function setCurrentTenantContext(
+  tenantId: string,
+  userId?: string,
+  options: { traceId?: string; requestId?: string; sessionId?: string } = {}
+): void {
+  const context: TenantContext = {
+    tenantId,
+    userId,
+    ...options
+  };
+  setTenantContext(context);
 }
 
 /**
@@ -131,24 +157,5 @@ if (process.env.NODE_ENV !== 'production') {
   setDefaultTenantContext();
 }
 
-export class TenantContext {
-  tenantId: string;
-  userId: string;
-  requestId: string;
-
-  constructor(tenantId: string, userId: string, requestId: string = '') {
-    this.tenantId = tenantId;
-    this.userId = userId;
-    this.requestId = requestId;
-  }
-}
-
-export function setTenantContext(context: TenantContext): void {
-  // In real implementation, this would set the context in AsyncLocalStorage for the current call chain
-  console.log(`Setting tenant context: ${context.tenantId}, user: ${context.userId}`);
-}
-
-// Add aliases for compatibility with existing tests
-export const getCurrentTenantContext = getTenantContext;
-export const setCurrentTenantContext = setTenantContext;
+// Export storage for direct access in tests
 export { tenantContextStorage };
