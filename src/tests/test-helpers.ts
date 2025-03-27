@@ -53,11 +53,11 @@ export function createCompleteTextCommand(
 ): CompleteTextCommand {
   return {
     type: 'COMPLETE_TEXT',
-    documentId: 'test-doc-1',
-    userId: 'test-user-1',
-    position: 120,
-    requiresAIAnalysis: true,
+    documentId: 'doc-123',
+    userId: 'user-1',
+    position: 10,
     contextParameters: createStandardContextParameters(),
+    requiresAIAnalysis: true,
     analysisParameters: {
       type: 'COMPLETE_TEXT',
       model: 'gpt-4',
@@ -76,37 +76,37 @@ export function createRewriteTextCommand(
 ): RewriteTextCommand {
   return {
     type: 'REWRITE_TEXT',
-    documentId: 'test-doc-1',
-    userId: 'test-user-1',
-    selectionStart: 50,
-    selectionEnd: 100,
+    documentId: 'doc-123',
+    userId: 'user-1',
+    selectionStart: 10,
+    selectionEnd: 20,
     instructions: 'Make this more concise',
-    requiresAIAnalysis: true,
     contextParameters: createStandardContextParameters(),
+    requiresAIAnalysis: true,
     analysisParameters: {
       type: 'REWRITE_SELECTION',
       model: 'gpt-4',
       temperature: 0.7,
-      maxTokens: 150
+      maxTokens: 100
     },
     ...overrides
   };
 }
 
 /**
- * Creates a grammar check command for testing
+ * Creates a grammar check command with all required properties
  */
 export function createGrammarCheckCommand(
   overrides: Partial<GrammarCheckCommand> = {}
 ): GrammarCheckCommand {
   return {
     type: 'GRAMMAR_CHECK',
-    documentId: 'test-doc-1',
-    userId: 'test-user-1',
-    selectionStart: 50,
+    documentId: 'doc-123',
+    userId: 'user-1',
+    selectionStart: 10,
     selectionEnd: 100,
-    requiresAIAnalysis: true,
     contextParameters: createStandardContextParameters(),
+    requiresAIAnalysis: true,
     analysisParameters: {
       type: 'CHECK_GRAMMAR',
       model: 'gpt-4'
@@ -123,17 +123,19 @@ export function createSemanticRewriteCommand(
 ): SemanticRewriteCommand {
   return {
     type: 'SEMANTIC_REWRITE',
-    documentId: 'test-doc-1',
-    userId: 'test-user-1',
-    selectionStart: 50,
-    selectionEnd: 100,
+    documentId: 'doc-123',
+    userId: 'user-1',
+    selectionStart: 10,
+    selectionEnd: 20,
     intent: {
       tone: 'formal',
       style: 'concise',
       audience: 'expert'
     },
+    contextParameters: createStandardContextParameters({
+      preserveStructure: true
+    }),
     requiresAIAnalysis: true,
-    contextParameters: createStandardContextParameters(),
     ...overrides
   };
 }
@@ -186,3 +188,22 @@ export function createMockResolution(
     ...overrides
   };
 }
+
+const grammarCheckCommand = createGrammarCheckCommand({
+  documentId: testDocumentId,
+  userId: testUserId,
+  selectionStart: 40,
+  selectionEnd: 90,
+  contextParameters: {
+    windowSize: 200,
+    includePreceding: true,
+    includeFollowing: true
+  },
+  analysisParameters: {
+    type: 'CHECK_GRAMMAR',
+    model: 'gpt-3.5-turbo',
+    temperature: 0.3,
+    maxTokens: 100,
+    cache: true
+  }
+});

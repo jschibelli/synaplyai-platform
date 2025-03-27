@@ -26,6 +26,7 @@ export interface AIAnalysisParameters {
   cache?: boolean;
   cacheTTL?: number;
   fallbackType?: string;
+  content?: string;
   // Support any additional properties for test flexibility
   [key: string]: any;
 }
@@ -135,6 +136,31 @@ export interface AICommandContext {
   followingText?: string;
   onProgress?: (progress: any) => void;
   onToken?: (token: any) => void;
+  [key: string]: any;
+}
+
+// Add AICommandContext interface
+export interface AICommandContext {
+  selectedText?: string;
+  precedingText?: string;
+  followingText?: string;
+  documentMetadata?: any;
+  tenantContext?: {
+    tenantId: string;
+    userId: string;
+  };
+  collaborativeState?: {
+    activeUsers?: string[];
+    userCursors?: Record<string, {position: number, selecting: boolean, selectionEnd?: number}>;
+    userIntents?: Record<string, {intent: string, section: string}>;
+    pendingChanges?: Array<{userId: string, position: number, type: string, content: string}>;
+  };
+  structure?: {
+    type: string;
+    children: Array<{type: string, start: number, end: number}>;
+  };
+  references?: Array<{type: string, id: string, position: number}>;
+  onProgress?: (update: string) => void;
   [key: string]: any;
 }
 
@@ -248,4 +274,20 @@ export interface RedisMetricsClient {
   getFilterResultCounts: jest.Mock;
   getPipelineLatency: jest.Mock;
   [key: string]: any;
+}
+
+// Add this interface
+export interface TextCompletedEvent {
+  documentId: string;
+  userId: string;
+  position: number;
+  text: string;
+  aiGenerated: boolean;
+  timestamp?: number;
+  modelId?: string;
+  tokenUsage?: {
+    prompt: number;
+    completion: number;
+    total: number;
+  };
 }

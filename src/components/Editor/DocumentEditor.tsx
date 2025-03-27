@@ -1,13 +1,12 @@
 import React from 'react';
 
 export interface DocumentEditorProps {
-  document: any;
-  documentId?: string; // Add for backward compatibility
-  userId?: string;     // Add for backward compatibility
-  // Other props
-  onConflict?: (conflict: any) => void;
-  onResolve?: (resolution: any) => void;
+  documentId: string;
+  userId?: string;
+  document?: any; // Make document optional
   readOnly?: boolean;
+  onSave?: (content: string) => void;
+  onError?: (error: Error) => void;
 }
 
 export const DocumentEditor: React.FC<DocumentEditorProps> = (props) => {

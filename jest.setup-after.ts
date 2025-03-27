@@ -6,6 +6,10 @@ import { createCircuitBreakerMock } from './src/__mocks__/circuit-breaker.mock';
 import { createCommandRegistryMock } from './src/__mocks__/command-registry.mock';
 import { createDocumentEditorMock } from './src/__mocks__/document-editor.mock';
 
+// This ensures toBeInTheDocument() and other DOM matchers work
+
+// This will make the toBeInTheDocument() matcher available
+
 // Extend the global namespace with our test helpers
 declare global {
   namespace jest {

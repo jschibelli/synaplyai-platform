@@ -179,14 +179,12 @@ describe('AI Commands', () => {
       const handler = handlerCall[1];
       
       // Create a test command
-      const command = {
-        type: 'COMPLETE_TEXT',
+      const command = createCompleteTextCommand({
         documentId: 'doc-1',
         userId: 'user-1',
         position: 10,
-        prompt: 'Complete this text',
-        requiresAIAnalysis: true
-      };
+        prompt: 'Complete this text'
+      });
       
       // Create context and analysis
       const context = {

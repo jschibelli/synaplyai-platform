@@ -22,8 +22,7 @@ describe('Text Completion Command', () => {
   const testDocumentId = 'doc-123';
   
   // Sample command
-  const testCommand: CompleteTextCommand = {
-    type: 'COMPLETE_TEXT',
+  const testCommand = createCompleteTextCommand({
     documentId: 'doc-1',
     userId: 'user-1',
     position: 0,
@@ -32,15 +31,8 @@ describe('Text Completion Command', () => {
       windowSize: 100,
       includePreceding: true,
       includeFollowing: false
-    },
-    analysisParameters: {
-      model: 'gpt-4',
-      temperature: 0.7,
-      maxTokens: 100
-    },
-    parameters: {}, // Add required parameters
-    requiresAIAnalysis: true
-  };
+    }
+  });
   
   // Sample context
   const testContext: DocumentContext = {

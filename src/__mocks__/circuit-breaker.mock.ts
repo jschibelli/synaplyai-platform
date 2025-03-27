@@ -3,32 +3,15 @@ import { CircuitState } from '../lib/circuit-breaker';
 
 export function createCircuitBreakerMock() {
   return {
-    execute: createTypedMock().mockImplementation(async (fn) => {
-      return await fn();
-    }),
-    
-    executeWithBulkhead: createTypedMock().mockImplementation(async (fn) => {
-      return await fn();
-    }),
-    
-    getState: createTypedMock().mockResolvedValue(CircuitState.CLOSED),
-    
-    recordSuccess: createTypedMock().mockResolvedValue(undefined),
-    
-    recordFailure: createTypedMock().mockResolvedValue(undefined),
-    
-    transitionState: createTypedMock().mockResolvedValue(undefined),
-    
-    shouldAttemptReset: createTypedMock().mockReturnValue(false),
-    
-    options: {
-      failureThreshold: 3,
-      failureWindow: 60000,
-      resetTimeout: 30000,
-      bulkheadLimit: 10
-    },
-    
-    serviceName: 'mock-service'
+    execute: jest.fn().mockImplementation(fn => fn()),
+    executeWithBulkhead: jest.fn(),
+    getState: jest.fn().mockReturnValue('CLOSED'),
+    recordSuccess: jest.fn(),
+    recordFailure: jest.fn(),
+    transitionState: jest.fn(),
+    shouldAttemptReset: jest.fn(),
+    options: { failureThreshold: 5, resetTimeout: 30000 },
+    serviceName: 'test-service'
   };
 }
 

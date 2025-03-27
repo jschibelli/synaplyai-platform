@@ -58,14 +58,18 @@ class InMemoryStateRepository implements CircuitBreakerStateRepository {
 }
 
 /**
- * Circuit breaker implementation
+ * Circuit breaker implementation for resilience
  */
 export class CircuitBreaker {
   private options: CircuitBreakerOptions;
   private stateRepository: CircuitBreakerStateRepository;
+  state: CircuitState = CircuitState.CLOSED;
+  failureCount: number = 0;
+  successCount: number = 0;
+  lastStateChange: number = Date.now();
   
   constructor(
-    private serviceName: string,
+    public serviceName: string,
     options: Partial<CircuitBreakerOptions> = {}
   ) {
     this.options = {
@@ -239,5 +243,20 @@ export class CircuitBreaker {
     
     const tenantContext = getTenantContext();
     return tenantContext?.tenantId || 'global';
+  }
+  
+  /**
+   * Transitions the circuit to a new state
+   */
+  transitionToState(newState: CircuitState): void {
+    this.state = newState;
+    this.lastStateChange = Date.now();
+    
+    if (newState === CircuitState.CLOSED) {
+      this.failureCount = 0;
+      this.successCount = 0;
+    } else if (newState === CircuitState.HALF_OPEN) {
+      this.successCount = 0;
+    }
   }
 }

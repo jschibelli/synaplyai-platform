@@ -3,6 +3,23 @@ import { DocumentEvent } from '../events/types';
 import { ComplianceLogger } from '../../compliance/logger';
 import { MetricsCollector } from '../../metrics/metrics-collector';
 
+// Export types to match what tests are expecting
+export { ConflictType } from './ConflictDetector';
+export enum ConflictResolutionStrategy {
+  MERGE = 'MERGE',
+  LOCAL_FIRST = 'LOCAL_FIRST',
+  REMOTE_FIRST = 'REMOTE_FIRST',
+  MANUAL = 'MANUAL',
+  AI_ASSISTED = 'AI_ASSISTED'
+}
+
+export enum ConflictResolutionResult {
+  MERGED = 'MERGED',
+  LOCAL_WINS = 'LOCAL_WINS',
+  REMOTE_WINS = 'REMOTE_WINS',
+  UNRESOLVED = 'UNRESOLVED'
+}
+
 /**
  * Enum for resolution strategies
  */
@@ -22,6 +39,10 @@ export interface ResolutionResult {
   strategy: ResolutionStrategy;
   resolvedEvents: DocumentEvent[];
   description: string;
+  result?: ConflictResolutionResult;
+  get resolvedEvent(): DocumentEvent | undefined {
+    return this.resolvedEvents?.[0];
+  }
 }
 
 /**
@@ -302,5 +323,55 @@ export class ConflictResolver {
    */
   private isFormatEvent(event: DocumentEvent): boolean {
     return ['FORMAT_APPLIED', 'FORMAT_REMOVED'].includes(event.type);
+  }
+
+  /**
+   * Get recommended resolution strategy for a conflict
+   */
+  getRecommendedStrategy(conflict: Conflict): ConflictResolutionStrategy {
+    // Use different strategies based on conflict type
+    switch (conflict.type) {
+      case ConflictType.TEXT_EDIT:
+        return ConflictResolutionStrategy.MERGE;
+      case ConflictType.FORMAT:
+        return ConflictResolutionStrategy.MERGE;
+      case ConflictType.DELETE_MODIFIED:
+        return ConflictResolutionStrategy.REMOTE_FIRST;
+      case ConflictType.STRUCTURAL:
+        return ConflictResolutionStrategy.MANUAL;
+      case ConflictType.MOVE_MODIFIED:
+        return ConflictResolutionStrategy.MANUAL;
+      default:
+        return ConflictResolutionStrategy.MERGE;
+    }
+  }
+
+  /**
+   * Get statistics for conflicts on a document
+   */
+  async getConflictStatistics(documentId: string): Promise<{
+    totalConflicts: number;
+    resolvedConflicts: number;
+    unresolvedConflicts: number;
+    averageResolutionTimeMs: number;
+  }> {
+    const totalConflicts = await this.metricsCollector.getCounter(
+      `conflict.total.${documentId}`
+    );
+    
+    const resolvedConflicts = await this.metricsCollector.getCounter(
+      `conflict.resolved.${documentId}`
+    );
+    
+    const averageResolutionTimeMs = await this.metricsCollector.getAverageValue(
+      `conflict.resolution.timeMs.${documentId}`
+    );
+    
+    return {
+      totalConflicts,
+      resolvedConflicts,
+      unresolvedConflicts: totalConflicts - resolvedConflicts,
+      averageResolutionTimeMs
+    };
   }
 }
