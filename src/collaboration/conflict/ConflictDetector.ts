@@ -592,6 +592,13 @@ export class ConflictDetector {
     clock1?: Record<string, number>, 
     clock2?: Record<string, number>
   ): ConflictDetectionResult {
+    // Support both direct properties and nested operation
+    const getPosition = (op: VersionedOperation) => op.position ?? op.operation?.position ?? 0;
+    const getLength = (op: VersionedOperation) => 
+      op.length ?? op.operation?.length ?? 
+      (op.text?.length ?? op.operation?.content?.length ?? 0);
+    const getType = (op: VersionedOperation) => op.type ?? op.operation?.type;
+    
     // Implementation based on what your tests expect
     if (op1.timestamp < op2.timestamp - 1000) {
       return {
@@ -608,19 +615,19 @@ export class ConflictDetector {
     }
     
     // Check if operations modify overlapping regions
-    const op1End = op1.position + (op1.length || 0);
-    const op2End = op2.position + (op2.length || 0);
+    const op1End = getPosition(op1) + (getLength(op1) || 0);
+    const op2End = getPosition(op2) + (getLength(op2) || 0);
     
-    if (op1.position <= op2End && op2.position <= op1End) {
+    if (getPosition(op1) <= op2End && getPosition(op2) <= op1End) {
       // Operations have overlapping regions
-      if (op1.type === 'delete' && op2.type !== 'delete') {
+      if (getType(op1) === 'delete' && getType(op2) !== 'delete') {
         return {
           hasConflict: true,
           relationship: OperationRelationship.CONCURRENT,
           conflictType: ConflictType.DELETE_MODIFIED,
           confidenceScore: 0.8,
           affectedRegion: {
-            start: Math.min(op1.position, op2.position),
+            start: Math.min(getPosition(op1), getPosition(op2)),
             end: Math.max(op1End, op2End)
           }
         };
@@ -629,11 +636,11 @@ export class ConflictDetector {
       return {
         hasConflict: true,
         relationship: OperationRelationship.CONCURRENT,
-        conflictType: op1.type === 'format' || op2.type === 'format' ? 
+        conflictType: getType(op1) === 'format' || getType(op2) === 'format' ? 
           ConflictType.FORMAT : ConflictType.TEXT_EDIT,
         confidenceScore: 0.8,
         affectedRegion: {
-          start: Math.min(op1.position, op2.position),
+          start: Math.min(getPosition(op1), getPosition(op2)),
           end: Math.max(op1End, op2End)
         }
       };

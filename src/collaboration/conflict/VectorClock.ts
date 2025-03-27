@@ -3,15 +3,7 @@
  * Each client has its own logical clock that increments with each local operation
  */
 export class VectorClock {
-  private clock: Record<string, number>;
-
-  constructor(initialClock?: Record<string, number> | string) {
-    if (typeof initialClock === 'string') {
-      this.clock = { [initialClock]: 1 };
-    } else {
-      this.clock = initialClock || {};
-    }
-  }
+  constructor(public clock: Record<string, number> = {}) {}
 
   /**
    * Increments the counter for the specified node/client
@@ -147,5 +139,12 @@ export class VectorClock {
     // Two clocks are concurrent if neither happens before the other
     const comparison = this.compare(other);
     return comparison !== -1 && comparison !== 1;
+  }
+
+  /**
+   * Makes VectorClock compatible with Record<string, number>
+   */
+  toRecord(): Record<string, number> {
+    return { ...this.clock };
   }
 }
