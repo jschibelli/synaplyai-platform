@@ -17,10 +17,11 @@ export interface AIAnalysisResult {
 export function createMetricsCollectorMock() {
   return {
     // Core metrics methods
-    increment: createTypedMock().mockResolvedValue(undefined),
-    recordLatency: createTypedMock().mockResolvedValue(undefined),
-    recordValue: createTypedMock().mockResolvedValue(undefined),
-    track: createTypedMock().mockResolvedValue(undefined),
+    increment: jest.fn().mockResolvedValue(undefined),
+    incrementCounter: jest.fn().mockResolvedValue(undefined), // For backward compatibility
+    recordLatency: jest.fn().mockResolvedValue(undefined),
+    recordValue: jest.fn().mockResolvedValue(undefined),
+    track: jest.fn().mockResolvedValue(undefined),
     
     // Circuit breaker methods
     setCircuitBreakerState: createTypedMock().mockResolvedValue(undefined),
@@ -47,8 +48,13 @@ export function createMetricsCollectorMock() {
       FLAGGED: 0
     }),
     getPercentileLatency: createTypedMock().mockResolvedValue(100),
-    getAverageValue: createTypedMock().mockResolvedValue(50),
-    getCountValue: createTypedMock().mockResolvedValue(10)
+    getAverageValue: jest.fn().mockResolvedValue(50),
+    getCounter: jest.fn().mockResolvedValue(10),
+    getCountValue: jest.fn().mockResolvedValue(5),
+    getPipelineLatency: jest.fn().mockResolvedValue(100),
+    reset: jest.fn().mockResolvedValue(undefined),
+    metrics: {},
+    redisClient: {}
   };
 }
 

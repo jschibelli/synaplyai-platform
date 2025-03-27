@@ -136,15 +136,69 @@ export class VectorClock {
    * Checks if the vector clock is concurrent with another
    */
   isConcurrentWith(other: VectorClock): boolean {
-    // Two clocks are concurrent if neither happens before the other
-    const comparison = this.compare(other);
-    return comparison !== -1 && comparison !== 1;
+    // Two clocks are concurrent if they're incomparable (some values greater, some less)
+    // Equal clocks are NOT concurrent with each other (they represent the same causal history)
+    
+    // If clocks are equal, they're not concurrent
+    if (this.equals(other)) {
+      return false;
+    }
+    
+    // Otherwise, they're concurrent if neither happens before the other
+    return !this.happenedBefore(other) && !other.happenedBefore(this);
   }
 
   /**
    * Makes VectorClock compatible with Record<string, number>
    */
   toRecord(): Record<string, number> {
+    return { ...this.clock };
+  }
+
+  /**
+   * Determines if this vector clock happened before another
+   */
+  happenedBefore(other: VectorClock): boolean {
+    // A happened before B if A has some values less than B and none greater
+    let foundLess = false;
+    
+    // Check each node in this clock
+    for (const [nodeId, timestamp] of Object.entries(this.clock)) {
+      // If other doesn't have this node or has a smaller value, this can't have happened before other
+      if (!(nodeId in other.clock) || timestamp > other.clock[nodeId]) {
+        return false;
+      }
+      
+      // Track if we found at least one value where this is less than other
+      if (timestamp < other.clock[nodeId]) {
+        foundLess = true;
+      }
+    }
+    
+    // Check if other has nodes this doesn't have
+    for (const nodeId in other.clock) {
+      if (!(nodeId in this.clock) && other.clock[nodeId] > 0) {
+        foundLess = true;
+      }
+    }
+    
+    // This happened before other if at least one value is less and none are greater
+    return foundLess;
+  }
+
+  /**
+   * Creates a clone of this vector clock
+   */
+  clone(): VectorClock {
+    // Create a new clock with a copy of this clock's data
+    return new VectorClock({ ...this.clock });
+  }
+
+  /**
+   * Alias for getClock() to maintain backward compatibility with tests
+   */
+  getClocks(): Record<string, number> {
+    // Need to ensure we're returning Record<string, number> and not a number
     return { ...this.clock };
   }
 }

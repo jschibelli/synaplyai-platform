@@ -5,16 +5,42 @@ import { createMetricsCollectorMock } from './src/__mocks__/metrics-collector.mo
 import { createCircuitBreakerMock } from './src/__mocks__/circuit-breaker.mock';
 import { createCommandRegistryMock } from './src/__mocks__/command-registry.mock';
 import { createDocumentEditorMock } from './src/__mocks__/document-editor.mock';
+import { MockWebSocket } from './__mocks__/websocket.mock';
 
-// This ensures toBeInTheDocument() and other DOM matchers work
+import { cleanup } from '@testing-library/react';
 
-// This will make the toBeInTheDocument() matcher available
+// Make sure DOM matchers are available in tests
+expect.extend({
+  toBeInTheDocument(received) {
+    const { isNot, utils } = this;
+    return {
+      pass: received !== null && received !== undefined && received.ownerDocument && received.ownerDocument.contains(received),
+      message: () => `Expected element ${isNot ? 'not ' : ''}to be in the document`
+    };
+  },
+  toHaveClass(received, className) {
+    const { isNot, utils } = this;
+    const pass = received && received.classList && received.classList.contains(className);
+    return {
+      pass,
+      message: () => `Expected element ${isNot ? 'not ' : ''}to have class "${className}"`
+    };
+  }
+});
+
+// Export cleanup for use in tests
+global.cleanup = cleanup;
 
 // Extend the global namespace with our test helpers
 declare global {
   namespace jest {
     interface Matchers<R> {
       toBeInTheDocument(): R;
+      toHaveClass(className: string): R;
+      toHaveStyle(style: Record<string, any>): R;
+      toHaveAttribute(attr: string, value?: string): R;
+      toHaveTextContent(text: string | RegExp): R;
+      toHaveAccessibleName(): R;
     }
   }
   
@@ -24,6 +50,7 @@ declare global {
   var tenantContextStorage: {
     run: jest.Mock;
   };
+  var cleanup: () => void;  // ✅ Define by function signature instead of self-reference
   
   // Add these to fix the global index signature errors
   var createMockDocument: jest.Mock;
@@ -63,65 +90,6 @@ declare global {
     error: Event;
     message: MessageEvent;
     open: Event;
-  }
-}
-
-// Modify the MockWebSocket class
-class MockWebSocket implements WebSocket {
-  // Static constants for reference
-  static readonly CONNECTING: 0 = 0;
-  static readonly OPEN: 1 = 1;
-  static readonly CLOSING: 2 = 2;
-  static readonly CLOSED: 3 = 3;
-  
-  // Instance properties required by WebSocket interface
-  readonly CONNECTING: 0 = 0;
-  readonly OPEN: 1 = 1;
-  readonly CLOSING: 2 = 2;
-  readonly CLOSED: 3 = 3;  // Only need one set of these properties
-  
-  url: string;
-  readyState: number = 1; // OPEN
-  binaryType: 'blob' | 'arraybuffer' = 'blob';
-  protocol: string = '';
-  extensions: string = '';
-  bufferedAmount: number = 0;
-  
-  onopen: ((this: WebSocket, ev: Event) => any) | null = null;
-  onclose: ((this: WebSocket, ev: CloseEvent) => any) | null = null;
-  onmessage: ((this: WebSocket, ev: MessageEvent) => any) | null = null;
-  onerror: ((this: WebSocket, ev: Event) => any) | null = null;
-  
-  constructor(url: string | URL) {
-    this.url = url.toString();
-  }
-  
-  send = jest.fn();
-  close = jest.fn();
-  addEventListener = jest.fn();
-  removeEventListener = jest.fn();
-  dispatchEvent(event: Event): boolean { return true; }
-  
-  // Additional methods for testing
-  static sentMessages: any[] = [];
-  messages: any[] = [];
-  
-  static triggerMessage(data: any): void {
-    // Implementation for testing
-  }
-  
-  triggerMessage(data: any): void {
-    if (this.onmessage) {
-      this.onmessage({ data } as any);
-    }
-  }
-  
-  static reset(): void {
-    MockWebSocket.sentMessages = [];
-  }
-  
-  static simulateReconnection(): void {
-    // Implementation for reconnection simulation
   }
 }
 
@@ -177,4 +145,19 @@ jest.mock('./src/ai/AICommandRegistry', () => {
     validateCommand: jest.fn().mockReturnValue({ valid: true }),
     isValidCommand: jest.fn().mockReturnValue(true)
   };
+});
+
+// Set up additional matchers for DOM testing
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: jest.fn().mockImplementation(query => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: jest.fn(),
+    removeListener: jest.fn(),
+    addEventListener: jest.fn(),
+    removeEventListener: jest.fn(),
+    dispatchEvent: jest.fn(),
+  })),
 });

@@ -1,5 +1,7 @@
+import { DocumentEvent } from '../events/types';
+
 /**
- * Operational relationship between events
+ * Types of operations relationship
  */
 export enum OperationRelationship {
   BEFORE = 'before',
@@ -16,11 +18,12 @@ export enum ConflictType {
   FORMAT = 'FORMAT',
   DELETE_MODIFIED = 'DELETE_MODIFIED',
   STRUCTURAL = 'STRUCTURAL',
-  MOVE_MODIFIED = 'MOVE_MODIFIED'
+  MOVE_MODIFIED = 'MOVE_MODIFIED',
+  NONE = 'NONE'
 }
 
 /**
- * Result of conflict detection
+ * Result of conflict detection between operations
  */
 export interface ConflictDetectionResult {
   hasConflict: boolean;
@@ -34,7 +37,48 @@ export interface ConflictDetectionResult {
 }
 
 /**
- * Conflict resolution result
+ * Interface for operations with versioning
+ */
+export interface VersionedOperation {
+  id?: string;
+  userId?: string;
+  clientId?: string;
+  documentId?: string;
+  timestamp: number;
+  vectorClock: Record<string, number> | {
+    toRecord: () => Record<string, number>;
+    getClock: () => Record<string, number>;
+  };
+  
+  // Direct operation properties
+  type?: string;
+  position?: number;
+  length?: number;
+  text?: string;
+  
+  // OR nested operation object
+  operation?: {
+    type: string;
+    position: number;
+    content?: string;
+    length?: number;
+    attributes?: Record<string, any>;
+  };
+}
+
+/**
+ * Strategy for conflict resolution
+ */
+export enum ConflictResolutionStrategy {
+  MERGE = 'MERGE',
+  LOCAL_FIRST = 'LOCAL_FIRST',
+  REMOTE_FIRST = 'REMOTE_FIRST',
+  MANUAL = 'MANUAL',
+  AI_ASSISTED = 'AI_ASSISTED'
+}
+
+/**
+ * Result of conflict resolution
  */
 export enum ConflictResolutionResult {
   MERGED = 'MERGED',
@@ -44,49 +88,39 @@ export enum ConflictResolutionResult {
 }
 
 /**
- * Strategy for resolving conflicts
+ * Resolution for a conflict
  */
-export enum ConflictResolutionStrategy {
-  MERGE = 'MERGE',
-  LOCAL_FIRST = 'LOCAL_FIRST',
-  REMOTE_FIRST = 'REMOTE_FIRST',
-  MANUAL = 'MANUAL'
-}
-
-export interface Conflict {
-  id: string;
-  documentId: string;
-  localEvent: DocumentEvent;
-  remoteEvent: DocumentEvent;
-  detectionResult: ConflictDetectionResult;
-  createdAt: number;
-  resolvedAt?: number;
-  resolution?: ConflictResolution;
-}
-
 export interface ConflictResolution {
   strategy: ConflictResolutionStrategy;
   resolvedEvents: DocumentEvent[];
   resolvedBy: string;
   customContent?: string;
   metadata?: Record<string, any>;
+  timestamp?: number;
+  
+  // For backward compatibility with tests
+  result?: ConflictResolutionResult;
+  resolvedEvent?: DocumentEvent;
 }
 
 /**
- * Versioned operation with vector clock
+ * Interface representing a detected conflict
  */
-export interface VersionedOperation {
+export interface Conflict {
   id: string;
-  userId: string;
   documentId: string;
-  operation: {
-    type: string;
-    position: number;
-    content?: string;
-    length?: number;
-    [key: string]: any;
-  };
-  clientId: string;
-  timestamp: number;
-  vectorClock: any;
+  localEvent: DocumentEvent;
+  remoteEvent: DocumentEvent;
+  type: ConflictType;
+  severity: 'low' | 'medium' | 'high';
+  description: string;
+  createdAt: number;
+  resolvedAt?: number;
+  resolution?: ConflictResolution;
+  
+  // For backward compatibility with tests
+  local?: any;
+  remote?: any;
+  localRegion?: { start: number; end: number; };
+  remoteRegion?: { start: number; end: number; };
 }
