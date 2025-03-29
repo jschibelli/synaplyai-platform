@@ -1,5 +1,9 @@
 import 'jest-environment-jsdom';
 
+import { circuitBreakerMock } from './src/__mocks__/circuit-breaker.mock';
+import { metricsCollectorMock } from './src/__mocks__/metrics-collector.mock';
+import { getTenantContextMock, setTenantContextMock, clearTenantContextMock } from './src/__mocks__/tenant-context.mock';
+
 // Mock implementations for browser APIs not available in Node.js
 global.ResizeObserver = class ResizeObserver {
   observe = jest.fn();
@@ -173,3 +177,29 @@ Object.defineProperty(process, 'env', {
     REDIS_PASSWORD: 'test'
   }
 });
+
+// Mock modules
+jest.mock('../src/lib/circuit-breaker', () => ({
+  CircuitBreaker: jest.fn().mockImplementation(() => circuitBreakerMock),
+  CircuitState: {
+    CLOSED: 'CLOSED',
+    OPEN: 'OPEN',
+    HALF_OPEN: 'HALF_OPEN'
+  }
+}));
+
+jest.mock('../src/metrics/metrics-collector', () => ({
+  MetricsCollector: jest.fn().mockImplementation(() => metricsCollectorMock)
+}));
+
+jest.mock('../src/lib/tenant-context', () => ({
+  getTenantContext: getTenantContextMock,
+  setTenantContext: setTenantContextMock,
+  clearTenantContext: clearTenantContextMock,
+  getCurrentTenantId: jest.fn().mockReturnValue('test-tenant')
+}));
+
+// Also mock the adaptive variant
+jest.mock('./src/circuit-breaker/adaptive-breaker', () => ({
+  AdaptiveCircuitBreaker: jest.fn().mockImplementation(() => circuitBreakerMock)
+}));

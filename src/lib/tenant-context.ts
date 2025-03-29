@@ -7,10 +7,16 @@ import { v4 as uuidv4 } from 'uuid';
 export interface TenantContext {
   tenantId: string;
   userId: string;
+
   requestId?: string;
+
   traceId?: string;
+  requestId: string;
+  features?: Record<string, boolean>;
+  roles?: string[];
   [key: string]: any;
 }
+
 
 // Create AsyncLocalStorage for tenant context
 export const tenantContextStorage = new AsyncLocalStorage<TenantContext>();
@@ -107,6 +113,10 @@ export function createTestTenantContext(overrides?: Partial<TenantContext>): Ten
   };
 }
 
+// Create a singleton instance of AsyncLocalStorage for tenant context
+const tenantContextStorage = new AsyncLocalStorage<TenantContext>();
+
+
 /**
  * Create a new tenant context
  */
@@ -114,7 +124,11 @@ export function createTenantContext(tenantId: string, userId: string, additional
   return {
     tenantId,
     userId,
+
     requestId: additionalContext.requestId || generateRequestId(), // Add a default requestId
+
+    requestId: additionalContext.requestId || `req-${uuidv4()}`, // Ensure requestId exists
+    traceId: additionalContext.traceId || `trace-${uuidv4()}`,
     ...additionalContext
   };
 }
@@ -214,4 +228,30 @@ export function setDefaultTenantContext() {
 // For development purposes only - will be replaced with proper middleware
 if (process.env.NODE_ENV !== 'production') {
   setDefaultTenantContext();
+
 }
+}
+
+/**
+ * Create a minimal default tenant context with required fields
+ */
+export function createDefaultTenantContext(tenantId: string): TenantContext {
+  return {
+    tenantId,
+    userId: 'system',
+    requestId: `auto-${Date.now()}`, // Generate a requestId to satisfy the interface
+    traceId: undefined
+  };
+}
+
+// Export a clear function for testing
+export function clearTenantContext(): void {
+  // AsyncLocalStorage doesn't have a direct way to clear context
+  tenantContextStorage.enterWith(undefined as any);
+}
+
+// Add aliases for compatibility with existing tests
+export const getCurrentTenantContext = getTenantContext;
+export const setCurrentTenantContext = setTenantContext;
+export { tenantContextStorage };
+

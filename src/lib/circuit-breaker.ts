@@ -1,6 +1,10 @@
 import { MetricsCollector } from '../services/metrics/MetricsCollector';
 import { getTenantContext } from './tenant-context';
+
 import { EventEmitter } from 'events';
+=======
+import { MetricsCollector } from './metrics/metrics-interface';
+
 
 /**
  * Circuit breaker states
@@ -10,6 +14,9 @@ export enum CircuitState {
   OPEN = 'OPEN',         // Failing, all requests rejected
   HALF_OPEN = 'HALF_OPEN' // Testing if service recovered
 }
+
+// Add type compatibility for string values
+export type CircuitStateType = CircuitState | 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
 /**
  * Circuit breaker state
@@ -186,6 +193,7 @@ export class TenantAwareCircuitBreaker {
   private circuitKey: string;
 
   constructor(
+
     private store: CircuitBreakerStore,
     private tenantId: string,
     serviceName: string,
@@ -195,6 +203,10 @@ export class TenantAwareCircuitBreaker {
       successThreshold: 2,
       resetTimeoutMs: 30000
     }
+    private serviceName: string,
+    options: Partial<CircuitBreakerOptions> = {},
+    private metricsCollector?: MetricsCollector
+
   ) {
     this.serviceName = serviceName;
     this.circuitKey = `${tenantId}:${serviceName}`;
