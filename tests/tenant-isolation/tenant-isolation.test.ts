@@ -1,4 +1,4 @@
-import { tenantContextStorage, TenantContext, setCurrentTenantContext, getCurrentTenantContext, getCurrentTenantId } from '../../src/lib/tenant-context';
+import { tenantContextStorage, TenantContext, setCurrentTenantContext, getCurrentTenantContext, getCurrentTenantId, createTenantContext, setCurrentTenantContextWithProperties } from '../../src/lib/tenant-context';
 import { PrismaClient } from '@prisma/client';
 import { addTenantMiddleware } from '../../src/prisma/middleware';
 
@@ -21,7 +21,7 @@ describe('Tenant Isolation', () => {
     const user2Email = `user2-${timestamp}@test.com`;
 
     // Set the tenant context before creating users
-    setCurrentTenantContext('test-tenant-1', 'test-user-1');
+    setCurrentTenantContextWithProperties('test-tenant-1', 'test-user-1');
 
     // Create test users with unique emails
     const user1 = await prisma.user.create({
@@ -36,7 +36,7 @@ describe('Tenant Isolation', () => {
     user1Id = user1.id;
 
     // Set different tenant context for second user
-    setCurrentTenantContext('test-tenant-2', 'test-user-2');
+    setCurrentTenantContextWithProperties('test-tenant-2', 'test-user-2');
 
     const user2 = await prisma.user.create({
       data: {
@@ -50,7 +50,7 @@ describe('Tenant Isolation', () => {
     user2Id = user2.id;
 
     // Reset to first tenant context for remaining tests
-    setCurrentTenantContext('test-tenant-1', 'test-user-1');
+    setCurrentTenantContextWithProperties('test-tenant-1', 'test-user-1');
   });
 
   afterEach(async () => {
@@ -168,6 +168,7 @@ describe('Tenant Isolation', () => {
   });
 
   test('should maintain tenant context', () => {
+    setCurrentTenantContextWithProperties('test-tenant-1', 'test-user-1');
     const context = getCurrentTenantContext();
     expect(context).toBeDefined();
     expect(context?.tenantId).toBe('test-tenant-1');

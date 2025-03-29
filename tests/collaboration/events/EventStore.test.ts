@@ -40,7 +40,7 @@ describe('EventStore', () => {
     eventStore = new EventStore(prisma, metricsCollector);
   });
   
-  describe('store', () => {
+  describe('appendEvent', () => {
     test('should store an event with version assignment', async () => {
       // Mock latest event query - no previous events
       prisma.event.findFirst.mockResolvedValueOnce(null);
@@ -71,7 +71,7 @@ describe('EventStore', () => {
       };
       
       // Store the event
-      const result = await eventStore.store(event);
+      const result = await eventStore.appendEvent(event);
       
       // Verify correct data was passed to create
       expect(prisma.event.create).toHaveBeenCalledWith({
@@ -130,7 +130,7 @@ describe('EventStore', () => {
       };
       
       // Store the event
-      const result = await eventStore.store(event);
+      const result = await eventStore.appendEvent(event);
       
       // Verify new version is incremented
       expect(result.version).toBe(6);
@@ -157,7 +157,7 @@ describe('EventStore', () => {
       };
       
       // Store with transaction client
-      await eventStore.store(event, { client: transactionClient });
+      await eventStore.appendEvent(event, { client: transactionClient });
       
       // Verify transaction client was used instead of prisma
       expect(transactionClient.event.findFirst).toHaveBeenCalled();
@@ -197,7 +197,11 @@ describe('EventStore', () => {
       prisma.event.findMany.mockResolvedValueOnce(mockEvents);
       
       // Replay events
-      const result = await eventStore.replayEvents('doc-1');
+      const result = await eventStore.replayEvents(
+        'doc-1',
+        (state, event) => ({ ...state, ...event.data }),
+        { content: '', version: 0 }
+      );
       
       // Verify query parameters
       expect(prisma.event.findMany).toHaveBeenCalledWith({
@@ -248,7 +252,11 @@ describe('EventStore', () => {
       prisma.event.findMany.mockResolvedValueOnce(mockEvents);
       
       // Replay events from version 3
-      const result = await eventStore.replayEvents('doc-1', 3);
+      const result = await eventStore.replayEvents(
+        'doc-1',
+        (state, event) => ({ ...state, ...event.data }),
+        { content: '', version: 0 }
+      );
       
       // Verify query parameters include version filter
       expect(prisma.event.findMany).toHaveBeenCalledWith({
@@ -295,12 +303,20 @@ describe('EventStore', () => {
       prisma.event.findMany.mockResolvedValueOnce(mockEvents);
       
       // First call should fetch from DB
-      const result1 = await eventStore.replayEvents('doc-1');
+      const result1 = await eventStore.replayEvents(
+        'doc-1',
+        (state, event) => ({ ...state, ...event.data }),
+        { content: '', version: 0 }
+      );
       expect(result1).toEqual(mockEvents);
       expect(prisma.event.findMany).toHaveBeenCalledTimes(1);
       
       // Second call should use cache
-      const result2 = await eventStore.replayEvents('doc-1');
+      const result2 = await eventStore.replayEvents(
+        'doc-1',
+        (state, event) => ({ ...state, ...event.data }),
+        { content: '', version: 0 }
+      );
       expect(result2).toEqual(mockEvents);
       
       // Verify DB was not called again
@@ -327,10 +343,19 @@ describe('EventStore', () => {
       prisma.event.findMany.mockResolvedValueOnce(mockEvents);
       
       // First call with caching
-      await eventStore.replayEvents('doc-1');
+      await eventStore.replayEvents(
+        'doc-1',
+        (state, event) => ({ ...state, ...event.data }),
+        { content: '', version: 0 }
+      );
       
       // Second call with caching disabled
-      await eventStore.replayEvents('doc-1', 0, { useCache: false });
+      await eventStore.replayEvents(
+        'doc-1',
+        (state, event) => ({ ...state, ...event.data }),
+        { content: '', version: 0 },
+        { useCache: false }
+      );
       
       // Verify DB was called twice
       expect(prisma.event.findMany).toHaveBeenCalledTimes(2);

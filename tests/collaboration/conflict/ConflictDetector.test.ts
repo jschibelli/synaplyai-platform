@@ -3,6 +3,7 @@ import { VectorClock } from '../../../src/collaboration/conflict/VectorClock';
 import { Operation } from '../../../src/collaboration/conflict/OperationalTransform';
 import { MetricsCollector } from '../../../src/metrics/collector';
 import { DocumentEvent } from '../../../src/collaboration/events/types';
+import { VersionedOperation, ConflictDetectionResult } from '../../../src/collaboration/types';
 
 // Mock dependencies
 jest.mock('../../../src/metrics/collector');
@@ -37,24 +38,29 @@ describe('ConflictDetector', () => {
       const clock2 = new VectorClock({ client1: 1, client2: 1 });
       
       const op1: VersionedOperation = {
-        operation: { type: 'insert', position: 0, content: 'Hello' },
-        vectorClock: clock1,
-        clientId: 'client1',
-        timestamp: Date.now() - 1000
+        id: 'op-1',
+        userId: 'client1',
+        documentId: 'doc-1',
+        type: 'insert',
+        position: 0,
+        text: 'Hello',
+        timestamp: Date.now() - 1000,
+        vectorClock: clock1.toRecord()
       };
       
       const op2: VersionedOperation = {
         operation: { type: 'insert', position: 5, content: ' world' },
-        vectorClock: clock2,
+        vectorClock: clock2.toRecord(), // Use toRecord() to convert
         clientId: 'client2',
         timestamp: Date.now()
       };
       
       const result = await conflictDetector.detectConflict(op1, op2);
       
-      expect(result.hasConflict).toBe(false);
-      expect(result.relationship).toBe('before');
-      expect(result.conflictType).toBeUndefined();
+      // Add null assertion to ensure TypeScript knows result is not null
+      expect(result!.hasConflict).toBe(false);
+      expect(result!.relationship).toBe('before');
+      expect(result!.conflictType).toBeUndefined();
       
       // Should record metrics
       expect(metricsCollector.recordLatency).toHaveBeenCalledWith(
@@ -70,24 +76,24 @@ describe('ConflictDetector', () => {
       
       const op1: VersionedOperation = {
         operation: { type: 'insert', position: 5, content: 'Hello' },
-        vectorClock: clock1,
+        vectorClock: clock1.toRecord(), // Use toRecord() to convert
         clientId: 'client1',
         timestamp: Date.now() - 1000
       };
       
       const op2: VersionedOperation = {
         operation: { type: 'insert', position: 5, content: 'World' },
-        vectorClock: clock2,
+        vectorClock: clock2.toRecord(), // Use toRecord() to convert
         clientId: 'client2',
         timestamp: Date.now()
       };
       
       const result = await conflictDetector.detectConflict(op1, op2);
       
-      expect(result.hasConflict).toBe(true);
-      expect(result.relationship).toBe('concurrent');
-      expect(result.conflictType).toBe('TEXT_EDIT');
-      expect(result.confidenceScore).toBeGreaterThan(0.5);
+      expect(result!.hasConflict).toBe(true);
+      expect(result!.relationship).toBe('concurrent');
+      expect(result!.conflictType).toBe('TEXT_EDIT');
+      expect(result!.confidenceScore).toBeGreaterThan(0.5);
     });
     
     test('should detect FORMAT conflict for concurrent formatting of same region', async () => {
@@ -102,7 +108,7 @@ describe('ConflictDetector', () => {
           length: 5,
           attributes: { bold: true } 
         },
-        vectorClock: clock1,
+        vectorClock: clock1.toRecord(), // Use toRecord() to convert
         clientId: 'client1',
         timestamp: Date.now() - 1000
       };
@@ -114,17 +120,17 @@ describe('ConflictDetector', () => {
           length: 5,
           attributes: { bold: false } 
         },
-        vectorClock: clock2,
+        vectorClock: clock2.toRecord(), // Use toRecord() to convert
         clientId: 'client2',
         timestamp: Date.now()
       };
       
       const result = await conflictDetector.detectConflict(op1, op2);
       
-      expect(result.hasConflict).toBe(true);
-      expect(result.relationship).toBe('concurrent');
-      expect(result.conflictType).toBe('FORMAT');
-      expect(result.confidenceScore).toBeGreaterThan(0.5);
+      expect(result!.hasConflict).toBe(true);
+      expect(result!.relationship).toBe('concurrent');
+      expect(result!.conflictType).toBe('FORMAT');
+      expect(result!.confidenceScore).toBeGreaterThan(0.5);
     });
     
     test('should not detect FORMAT conflict when different attributes are changed', async () => {
@@ -139,7 +145,7 @@ describe('ConflictDetector', () => {
           length: 5,
           attributes: { bold: true } 
         },
-        vectorClock: clock1,
+        vectorClock: clock1.toRecord(), // Use toRecord() to convert
         clientId: 'client1',
         timestamp: Date.now() - 1000
       };
@@ -151,16 +157,16 @@ describe('ConflictDetector', () => {
           length: 5,
           attributes: { italic: true } 
         },
-        vectorClock: clock2,
+        vectorClock: clock2.toRecord(), // Use toRecord() to convert
         clientId: 'client2',
         timestamp: Date.now()
       };
       
       const result = await conflictDetector.detectConflict(op1, op2);
       
-      expect(result.hasConflict).toBe(false);
-      expect(result.relationship).toBe('concurrent');
-      expect(result.conflictType).toBeUndefined();
+      expect(result!.hasConflict).toBe(false);
+      expect(result!.relationship).toBe('concurrent');
+      expect(result!.conflictType).toBeUndefined();
     });
     
     test('should detect DELETE_MODIFIED conflict when content is deleted and modified concurrently', async () => {
@@ -174,7 +180,7 @@ describe('ConflictDetector', () => {
           position: 0, 
           length: 10
         },
-        vectorClock: clock1,
+        vectorClock: clock1.toRecord(), // Use toRecord() to convert
         clientId: 'client1',
         timestamp: Date.now() - 1000
       };
@@ -185,17 +191,17 @@ describe('ConflictDetector', () => {
           position: 5,
           content: 'inserted text'
         },
-        vectorClock: clock2,
+        vectorClock: clock2.toRecord(), // Use toRecord() to convert
         clientId: 'client2',
         timestamp: Date.now()
       };
       
       const result = await conflictDetector.detectConflict(op1, op2);
       
-      expect(result.hasConflict).toBe(true);
-      expect(result.relationship).toBe('concurrent');
-      expect(result.conflictType).toBe('DELETE_MODIFIED');
-      expect(result.confidenceScore).toBeGreaterThan(0.5);
+      expect(result!.hasConflict).toBe(true);
+      expect(result!.relationship).toBe('concurrent');
+      expect(result!.conflictType).toBe('DELETE_MODIFIED');
+      expect(result!.confidenceScore).toBeGreaterThan(0.5);
     });
     
     test('should not detect conflict for operations on different regions', async () => {
@@ -209,7 +215,7 @@ describe('ConflictDetector', () => {
           position: 0, 
           content: 'Hello'
         },
-        vectorClock: clock1,
+        vectorClock: clock1.toRecord(), // Use toRecord() to convert
         clientId: 'client1',
         timestamp: Date.now() - 1000
       };
@@ -220,16 +226,16 @@ describe('ConflictDetector', () => {
           position: 20,
           content: 'World'
         },
-        vectorClock: clock2,
+        vectorClock: clock2.toRecord(), // Use toRecord() to convert
         clientId: 'client2',
         timestamp: Date.now()
       };
       
       const result = await conflictDetector.detectConflict(op1, op2);
       
-      expect(result.hasConflict).toBe(false);
-      expect(result.relationship).toBe('concurrent');
-      expect(result.conflictType).toBeUndefined();
+      expect(result!.hasConflict).toBe(false);
+      expect(result!.relationship).toBe('concurrent');
+      expect(result!.conflictType).toBeUndefined();
     });
     
     test('should not detect conflict for operations from the same client', async () => {
@@ -243,7 +249,7 @@ describe('ConflictDetector', () => {
           position: 5, 
           content: 'Hello'
         },
-        vectorClock: clock1,
+        vectorClock: clock1.toRecord(), // Use toRecord() to convert
         clientId: 'client1', // Same client
         timestamp: Date.now() - 1000
       };
@@ -254,7 +260,7 @@ describe('ConflictDetector', () => {
           position: 5,
           content: 'World'
         },
-        vectorClock: clock2,
+        vectorClock: clock2.toRecord(), // Use toRecord() to convert
         clientId: 'client1', // Same client
         timestamp: Date.now()
       };
@@ -262,9 +268,9 @@ describe('ConflictDetector', () => {
       // This should detect the relationship as "after" due to the vector clock
       const result = await conflictDetector.detectConflict(op1, op2);
       
-      expect(result.hasConflict).toBe(false);
-      expect(result.relationship).toBe('after');
-      expect(result.conflictType).toBeUndefined();
+      expect(result!.hasConflict).toBe(false);
+      expect(result!.relationship).toBe('after');
+      expect(result!.conflictType).toBeUndefined();
     });
   });
 });

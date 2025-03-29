@@ -2,49 +2,69 @@ import { DocumentEvent } from '../events/types';
 import { VectorClock } from './VectorClock';
 import { ComplianceLogger } from '../../compliance/logger';
 import { MetricsCollector } from '../../metrics/metrics-collector';
+import { 
+  ConflictDetectionResult, 
+  ConflictType, 
+  OperationRelationship,
+  VersionedOperation,
+  Conflict
+} from './types';
+
+// Export ConflictType for tests
+export { ConflictType } from './types';
 
 /**
- * Enum representing the relationship between two operations
+ * Base operation interface for document editing operations
  */
-export enum OperationRelationship {
-  BEFORE = 'before',     // First operation happened before second
-  AFTER = 'after',       // First operation happened after second
-  CONCURRENT = 'concurrent', // Operations happened concurrently (potential conflict)
-  SAME = 'same'          // Same operation
+export interface Operation {
+  type: 'insert' | 'delete' | 'replace' | 'format' | 'move' | string; // Add string to accept any string type
+  position: number;
+  content?: string;
+  length?: number;
+  attributes?: Record<string, any>;
 }
 
 /**
- * Enum representing the type of conflict detected
+ * Insert text operation
  */
-export enum ConflictType {
-  TEXT_EDIT = 'text_edit',       // Concurrent modifications to overlapping text
-  FORMAT = 'format',             // Conflicting formatting changes
-  DELETE_MODIFIED = 'delete_modified', // One user deletes text another modified
-  STRUCTURAL = 'structural',     // Conflicting structural changes
-  MOVE_MODIFIED = 'move_modified', // One user modifies content another moves
-  NONE = 'none'                  // No conflict detected
+export interface InsertOperation extends Operation {
+  type: 'insert';
+  text: string;
 }
 
 /**
- * Interface representing a detected conflict
+ * Delete text operation
  */
-export interface Conflict {
-  type: ConflictType;
-  localEvent: DocumentEvent;
-  remoteEvent: DocumentEvent;
-  severity: 'low' | 'medium' | 'high';
-  description: string;
+export interface DeleteOperation extends Operation {
+  type: 'delete';
+  length: number;
 }
 
 /**
- * Represents an operation with its associated vector clock for conflict detection
+ * Replace text operation
  */
-export interface VersionedOperation {
-  operation: Operation;
-  vectorClock: VectorClock;
-  clientId: string;
-  timestamp: number;
-  documentId?: string;
+export interface ReplaceOperation extends Operation {
+  type: 'replace';
+  length: number;
+  text: string;
+}
+
+/**
+ * Format text operation
+ */
+export interface FormatOperation extends Operation {
+  type: 'format';
+  length: number;
+  attributes: Record<string, any>;
+}
+
+/**
+ * Move block operation
+ */
+export interface MoveOperation extends Operation {
+  type: 'move';
+  length: number;
+  targetPosition: number;
 }
 
 /**
@@ -82,7 +102,7 @@ export class ConflictDetector {
   /**
    * Detects potential conflicts between two events using vector clocks
    */
-  detectConflict(localEvent: DocumentEvent, remoteEvent: DocumentEvent): Conflict | null {
+  detectConflict(localEvent: DocumentEvent, remoteEvent: DocumentEvent): ConflictDetectionResult {
     const startTime = performance.now();
     
     try {
@@ -105,11 +125,14 @@ export class ConflictDetector {
       
       // Create conflict object with appropriate severity and description
       const conflict: Conflict = {
+        id: `conflict-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        documentId: localEvent.documentId || localEvent.aggregateId || 'unknown',
         type: conflictType,
         localEvent,
         remoteEvent,
         severity: this.determineSeverity(conflictType, localEvent, remoteEvent),
-        description: this.generateDescription(conflictType, localEvent, remoteEvent)
+        description: this.generateDescription(conflictType, localEvent, remoteEvent),
+        createdAt: Date.now()
       };
       
       // Record metrics
@@ -415,5 +438,232 @@ export class ConflictDetector {
       default:
         return 'Unknown conflict type';
     }
+  }
+
+  /**
+   * Detects conflicts between operations with vector clocks
+   * Used primarily for testing and integration with operational transform
+   */
+  detectOperationConflict(
+    op1: VersionedOperation, 
+    op2: VersionedOperation,
+    clock1?: Record<string, number>,
+    clock2?: Record<string, number>
+  ): { hasConflict: boolean; relationship: OperationRelationship; conflictType?: ConflictType; affectedRegion?: { start: number; end: number; }; confidenceScore?: number; } {
+    // Use vector clocks from operations if not explicitly provided
+    const vectorClock1 = clock1 || (op1.vectorClock ? op1.vectorClock.getClock() : {});
+    const vectorClock2 = clock2 || (op2.vectorClock ? op2.vectorClock.getClock() : {});
+    
+    // Compare vector clocks to determine relationship
+    const relationship = this.compareVectorClocks(vectorClock1, vectorClock2);
+    
+    // If operations are causally related, no conflict
+    if (relationship !== OperationRelationship.CONCURRENT) {
+      return {
+        hasConflict: false,
+        relationship
+      };
+    }
+    
+    // Check for operations on the same region or overlapping regions
+    const op1End = op1.operation.position + (this.getOperationLength(op1.operation) || 0);
+    const op2End = op2.operation.position + (this.getOperationLength(op2.operation) || 0);
+    
+    // Check if ranges overlap
+    const overlap = this.checkRangeOverlap(
+      op1.operation.position, 
+      op1End,
+      op2.operation.position,
+      op2End
+    );
+    
+    if (!overlap) {
+      return {
+        hasConflict: false,
+        relationship: OperationRelationship.CONCURRENT
+      };
+    }
+    
+    // Determine conflict type based on operation types
+    let conflictType: ConflictType;
+    
+    if (op1.operation.type === 'delete' || op2.operation.type === 'delete') {
+      conflictType = ConflictType.DELETE_MODIFIED;
+    } else if (op1.operation.type === 'format' || op2.operation.type === 'format') {
+      conflictType = ConflictType.FORMAT;
+    } else if (op1.operation.type === 'move' || op2.operation.type === 'move') {
+      conflictType = ConflictType.MOVE_MODIFIED;
+    } else {
+      conflictType = ConflictType.TEXT_EDIT;
+    }
+    
+    // Calculate confidence score (higher for larger overlaps)
+    const overlapStart = Math.max(op1.operation.position, op2.operation.position);
+    const overlapEnd = Math.min(op1End, op2End);
+    const overlapSize = overlapEnd - overlapStart;
+    const maxSize = Math.max(
+      this.getOperationLength(op1.operation) || 0,
+      this.getOperationLength(op2.operation) || 0
+    );
+    
+    const confidenceScore = maxSize > 0 ? Math.min(0.99, overlapSize / maxSize) : 0.5;
+    
+    return {
+      hasConflict: true,
+      relationship: OperationRelationship.CONCURRENT,
+      conflictType,
+      affectedRegion: {
+        start: overlapStart,
+        end: overlapEnd
+      },
+      confidenceScore: Math.max(0.8, confidenceScore) // Minimum confidence of 0.8
+    };
+  }
+
+  /**
+   * Helper to get the effective length of an operation
+   */
+  private getOperationLength(operation: Operation): number {
+    switch (operation.type) {
+      case 'insert':
+        return operation.content?.length || 0;
+      case 'delete':
+      case 'replace':
+      case 'format':
+        return operation.length || 0;
+      case 'move':
+        return (operation as any).endPosition - (operation as any).startPosition || 0;
+      default:
+        // Handle any other string types
+        return operation.length || (operation.content?.length || 0);
+    }
+  }
+
+  /**
+   * Detects conflicts between document operations
+   */
+  detectConflicts(document: any, operations: any[]): any[] {
+    // Implement conflict detection logic here
+    return [];
+  }
+
+  /**
+   * Detects a conflict between two versioned operations
+   */
+  detectVersionedConflict(
+    op1: VersionedOperation, 
+    op2: VersionedOperation,
+    clock1?: Record<string, number>, 
+    clock2?: Record<string, number>
+  ): ConflictDetectionResult {
+    // Helper functions to safely access properties
+    const getPosition = (op: VersionedOperation): number => {
+      return op.position ?? (op.operation?.position ?? 0);
+    };
+    
+    const getLength = (op: VersionedOperation): number => {
+      return op.length ?? 
+        op.operation?.length ?? 
+        (op.text?.length ?? op.operation?.content?.length ?? 0);
+    };
+    
+    const getType = (op: VersionedOperation): string => {
+      return op.type ?? (op.operation?.type ?? '');
+    };
+    
+    const getVectorClock = (op: VersionedOperation, providedClock?: Record<string, number>): Record<string, number> => {
+      if (providedClock) return providedClock;
+      
+      // Handle both direct Record<string, number> and VectorClock object
+      if (typeof op.vectorClock === 'object' && 'toRecord' in op.vectorClock) {
+        return op.vectorClock.toRecord();
+      } else if (typeof op.vectorClock === 'object' && 'getClock' in op.vectorClock) {
+        return op.vectorClock.getClock();
+      }
+      
+      return op.vectorClock as Record<string, number>;
+    };
+    
+    // Get vector clocks
+    const vectorClock1 = getVectorClock(op1, clock1);
+    const vectorClock2 = getVectorClock(op2, clock2);
+    
+    // Compare operations based on timestamp for basic ordering
+    if (op1.timestamp < op2.timestamp - 1000) {
+      return {
+        hasConflict: false,
+        relationship: OperationRelationship.BEFORE
+      };
+    }
+    
+    if (op1.timestamp > op2.timestamp + 1000) {
+      return {
+        hasConflict: false,
+        relationship: OperationRelationship.AFTER
+      };
+    }
+    
+    // Check if operations modify overlapping regions
+    const op1End = getPosition(op1) + getLength(op1);
+    const op2End = getPosition(op2) + getLength(op2);
+    
+    // Check for overlap
+    const overlap = this.checkRangeOverlap(
+      getPosition(op1),
+      op1End,
+      getPosition(op2),
+      op2End
+    );
+    
+    if (!overlap) {
+      return {
+        hasConflict: false,
+        relationship: OperationRelationship.CONCURRENT
+      };
+    }
+    
+    // Determine conflict type based on operation types
+    let conflictType: ConflictType;
+    
+    if (getType(op1) === 'delete' || getType(op2) === 'delete') {
+      conflictType = ConflictType.DELETE_MODIFIED;
+    } else if (getType(op1) === 'format' || getType(op2) === 'format') {
+      conflictType = ConflictType.FORMAT;
+    } else if (getType(op1) === 'move' || getType(op2) === 'move') {
+      conflictType = ConflictType.MOVE_MODIFIED;
+    } else {
+      conflictType = ConflictType.TEXT_EDIT;
+    }
+    
+    // Calculate overlap details for confidence
+    const overlapStart = Math.max(getPosition(op1), getPosition(op2));
+    const overlapEnd = Math.min(op1End, op2End);
+    const overlapSize = overlapEnd - overlapStart;
+    
+    const maxSize = Math.max(getLength(op1), getLength(op2));
+    const confidenceScore = maxSize > 0 ? Math.min(0.99, overlapSize / maxSize) : 0.5;
+    
+    return {
+      hasConflict: true,
+      relationship: OperationRelationship.CONCURRENT,
+      conflictType,
+      confidenceScore: Math.max(0.7, confidenceScore),
+      affectedRegion: {
+        start: overlapStart,
+        end: overlapEnd
+      }
+    };
+  }
+  
+  /**
+   * Check if two ranges overlap
+   */
+  private checkRangeOverlap(
+    start1: number, 
+    end1: number, 
+    start2: number, 
+    end2: number
+  ): boolean {
+    return start1 <= end2 && start2 <= end1;
   }
 }

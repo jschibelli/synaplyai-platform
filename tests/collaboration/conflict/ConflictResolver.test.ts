@@ -6,6 +6,7 @@ import { MetricsCollector } from '../../../src/metrics/collector';
 import { EventStore } from '../../../src/collaboration/events/EventStore';
 import { BaseEvent } from '../../../src/collaboration/events/types';
 import { getTenantContext, setTenantContext, clearTenantContext } from '../../../src/lib/tenant-context';
+import { createTestConflict } from '../../tests/helpers/test-adapters';
 
 // Mock dependencies
 jest.mock('../../../src/metrics/collector');
@@ -286,7 +287,7 @@ describe('ConflictResolver', () => {
   describe('resolveConflict', () => {
     test('should resolve TEXT_EDIT conflicts using MERGE strategy', async () => {
       // Create conflict
-      const conflict = {
+      const conflict = createTestConflict({
         type: ConflictType.TEXT_EDIT,
         local: {
           id: 'event-1',
@@ -314,7 +315,7 @@ describe('ConflictResolver', () => {
         } as BaseEvent,
         localRegion: { start: 5, end: 10 },
         remoteRegion: { start: 5, end: 10 }
-      };
+      });
       
       // Resolve conflict with MERGE strategy
       const resolution = await resolver.resolveConflict(
@@ -337,7 +338,7 @@ describe('ConflictResolver', () => {
     
     test('should resolve FORMAT conflicts by merging non-conflicting attributes', async () => {
       // Create conflict
-      const conflict = {
+      const conflict = createTestConflict({
         type: ConflictType.FORMAT,
         local: {
           id: 'event-1',
@@ -367,7 +368,7 @@ describe('ConflictResolver', () => {
         } as BaseEvent,
         localRegion: { start: 0, end: 10 },
         remoteRegion: { start: 0, end: 10 }
-      };
+      });
       
       // Resolve conflict with MERGE strategy
       const resolution = await resolver.resolveConflict(
@@ -388,7 +389,7 @@ describe('ConflictResolver', () => {
     
     test('should resolve DELETE_MODIFIED conflicts by preserving modifications', async () => {
       // Create conflict
-      const conflict = {
+      const conflict = createTestConflict({
         type: ConflictType.DELETE_MODIFIED,
         local: {
           id: 'event-1',
@@ -416,7 +417,7 @@ describe('ConflictResolver', () => {
         } as BaseEvent,
         localRegion: { start: 5, end: 15 },
         remoteRegion: { start: 7, end: 12 }
-      };
+      });
       
       // Resolve conflict with MERGE strategy
       const resolution = await resolver.resolveConflict(
@@ -431,7 +432,7 @@ describe('ConflictResolver', () => {
     
     test('should prioritize local changes when using LOCAL_FIRST strategy', async () => {
       // Create conflict
-      const conflict = {
+      const conflict = createTestConflict({
         type: ConflictType.TEXT_EDIT,
         local: {
           id: 'event-1',
@@ -459,7 +460,7 @@ describe('ConflictResolver', () => {
         } as BaseEvent,
         localRegion: { start: 5, end: 10 },
         remoteRegion: { start: 5, end: 10 }
-      };
+      });
       
       // Resolve conflict with LOCAL_FIRST strategy
       const resolution = await resolver.resolveConflict(
@@ -474,7 +475,7 @@ describe('ConflictResolver', () => {
     
     test('should return UNRESOLVED when using MANUAL strategy', async () => {
       // Create conflict
-      const conflict = {
+      const conflict = createTestConflict({
         type: ConflictType.TEXT_EDIT,
         local: {
           id: 'event-1',
@@ -500,7 +501,7 @@ describe('ConflictResolver', () => {
           vectorClock: { user2: 1 },
           timestamp: new Date().toISOString()
         } as BaseEvent
-      };
+      });
       
       // Resolve conflict with MANUAL strategy
       const resolution = await resolver.resolveConflict(
@@ -648,44 +649,44 @@ describe('ConflictResolver', () => {
   
   describe('getRecommendedStrategy', () => {
     test('should recommend MERGE strategy for TEXT_EDIT conflicts', () => {
-      const conflict = {
+      const conflict = createTestConflict({
         type: ConflictType.TEXT_EDIT,
         local: {} as any,
         remote: {} as any
-      };
+      });
       
       const strategy = resolver.getRecommendedStrategy(conflict);
       expect(strategy).toBe(ConflictResolutionStrategy.MERGE);
     });
     
     test('should recommend MERGE strategy for FORMAT conflicts', () => {
-      const conflict = {
+      const conflict = createTestConflict({
         type: ConflictType.FORMAT,
         local: {} as any,
         remote: {} as any
-      };
+      });
       
       const strategy = resolver.getRecommendedStrategy(conflict);
       expect(strategy).toBe(ConflictResolutionStrategy.MERGE);
     });
     
     test('should recommend REMOTE_FIRST strategy for DELETE_MODIFIED conflicts', () => {
-      const conflict = {
+      const conflict = createTestConflict({
         type: ConflictType.DELETE_MODIFIED,
         local: {} as any,
         remote: {} as any
-      };
+      });
       
       const strategy = resolver.getRecommendedStrategy(conflict);
       expect(strategy).toBe(ConflictResolutionStrategy.REMOTE_FIRST);
     });
     
     test('should recommend MANUAL strategy for STRUCTURAL conflicts', () => {
-      const conflict = {
+      const conflict = createTestConflict({
         type: ConflictType.STRUCTURAL,
         local: {} as any,
         remote: {} as any
-      };
+      });
       
       const strategy = resolver.getRecommendedStrategy(conflict);
       expect(strategy).toBe(ConflictResolutionStrategy.MANUAL);
