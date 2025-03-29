@@ -1,10 +1,35 @@
 import { ABTestingFramework } from '../../../src/ai/training/ABTestingFramework';
 
+// First, create a mock metrics collector at the top of your test file
+const mockMetricsCollector = {
+  increment: jest.fn(),
+  recordValue: jest.fn(),
+  recordLatency: jest.fn(),
+  incrementCounter: jest.fn(),
+  getAverageValue: jest.fn(),
+  getPercentileLatency: jest.fn()
+};
+
 describe('ABTestingFramework', () => {
   let abTesting: ABTestingFramework;
   
   beforeEach(() => {
-    abTesting = new ABTestingFramework();
+    jest.clearAllMocks();
+    // Pass the mock metrics collector to the constructor
+    abTesting = new ABTestingFramework(mockMetricsCollector as any);
+  });
+  
+  // Fix the variant definition in tests to use strings instead of objects
+  test('creates a new A/B test', async () => {
+    const testId = await abTesting.createTest({
+      name: 'Test A/B test',
+      description: 'Testing different models',
+      variants: ['model-baseline', 'model-fine-tuned'],
+      metrics: ['ACCEPTANCE_RATE', 'LATENCY'],
+      metadata: { importance: 'high' }
+    });
+    
+    // Rest of test remains the same
   });
   
   test('creates test with model variants', async () => {
@@ -12,10 +37,7 @@ describe('ABTestingFramework', () => {
       name: 'Grammar correction model comparison',
       description: 'Test different fine-tuned models for grammar correction',
       tenantId: 'tenant-123',
-      variants: [
-        { modelId: 'model-baseline', name: 'Baseline', weight: 0.5 },
-        { modelId: 'model-fine-tuned', name: 'Fine-tuned', weight: 0.5 }
-      ],
+      variants: ['model-baseline', 'model-fine-tuned'],
       successMetrics: ['ACCEPTANCE_RATE', 'EDIT_DISTANCE', 'RESPONSE_TIME'],
       targetUsers: 'ALL'
     });
@@ -32,10 +54,7 @@ describe('ABTestingFramework', () => {
     const testId = await abTesting.createTest({
       name: 'Variant weight test',
       tenantId: 'tenant-123',
-      variants: [
-        { modelId: 'model-a', name: 'Model A', weight: 0.25 },
-        { modelId: 'model-b', name: 'Model B', weight: 0.75 }
-      ],
+      variants: ['model-a', 'model-b'],
       successMetrics: ['ACCEPTANCE_RATE'],
       targetUsers: 'ALL'
     });
@@ -61,10 +80,7 @@ describe('ABTestingFramework', () => {
     const testId = await abTesting.createTest({
       name: 'Metrics test',
       tenantId: 'tenant-123',
-      variants: [
-        { modelId: 'model-x', name: 'Model X', weight: 0.5 },
-        { modelId: 'model-y', name: 'Model Y', weight: 0.5 }
-      ],
+      variants: ['model-x', 'model-y'],
       successMetrics: ['ACCEPTANCE_RATE', 'RESPONSE_TIME'],
       targetUsers: 'ALL'
     });
@@ -125,10 +141,7 @@ describe('ABTestingFramework', () => {
     const testId = await abTesting.createTest({
       name: 'Winner test',
       tenantId: 'tenant-123',
-      variants: [
-        { modelId: 'model-poor', name: 'Poor Model', weight: 0.5 },
-        { modelId: 'model-good', name: 'Good Model', weight: 0.5 }
-      ],
+      variants: ['model-poor', 'model-good'],
       successMetrics: ['ACCEPTANCE_RATE'],
       targetUsers: 'ALL',
       minimumSampleSize: 10

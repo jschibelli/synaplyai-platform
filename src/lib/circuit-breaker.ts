@@ -1,4 +1,5 @@
 import { getTenantContext } from './tenant-context';
+import { MetricsCollector } from '../services/metrics/MetricsCollector';
 
 /**
  * Circuit breaker states
@@ -61,16 +62,21 @@ class InMemoryStateRepository implements CircuitBreakerStateRepository {
  * Circuit breaker implementation for resilience
  */
 export class CircuitBreaker {
+  public state: CircuitState = CircuitState.CLOSED;
+  public failureCount: number = 0;
+  public successCount: number = 0;
+  public lastStateChange: number = Date.now();
+  public serviceName: string;
+  
   private options: CircuitBreakerOptions;
   private stateRepository: CircuitBreakerStateRepository;
-  state: CircuitState = CircuitState.CLOSED;
-  failureCount: number = 0;
-  successCount: number = 0;
-  lastStateChange: number = Date.now();
-  
+  private metricsCollector?: MetricsCollector;
+  private bulkheadCounter: number = 0;
+
   constructor(
-    public serviceName: string,
-    options: Partial<CircuitBreakerOptions> = {}
+    serviceName: string,
+    options: Partial<CircuitBreakerOptions> = {},
+    metricsCollector?: MetricsCollector
   ) {
     this.options = {
       failureThreshold: options.failureThreshold || 5,
@@ -81,9 +87,11 @@ export class CircuitBreaker {
       stateRepository: options.stateRepository || new InMemoryStateRepository()
     };
     
+    this.serviceName = serviceName;
     this.stateRepository = this.options.stateRepository as CircuitBreakerStateRepository;
+    this.metricsCollector = metricsCollector;
   }
-  
+
   /**
    * Execute a function with circuit breaker protection
    */
@@ -99,6 +107,12 @@ export class CircuitBreaker {
         // Transition to half-open
         await this.transitionState(tenantId, CircuitState.HALF_OPEN);
       } else {
+        if (this.metricsCollector) {
+          await this.metricsCollector.track('circuit_breaker.rejected', {
+            service: this.serviceName,
+            state: this.state
+          });
+        }
         throw new Error(`Circuit for ${this.serviceName} is OPEN`);
       }
     }
@@ -119,7 +133,40 @@ export class CircuitBreaker {
       throw error;
     }
   }
-  
+
+  /**
+   * Execute a function with concurrency limiting
+   */
+  async executeWithBulkhead<T>(fn: () => Promise<T>, concurrencyLimit: number): Promise<T> {
+    try {
+      this.bulkheadCounter++;
+      
+      if (this.bulkheadCounter > concurrencyLimit) {
+        this.bulkheadCounter--;
+        
+        if (this.metricsCollector) {
+          await this.metricsCollector.track('bulkhead.rejected', {
+            service: this.serviceName,
+            limit: concurrencyLimit.toString()
+          });
+        }
+        
+        throw new Error('Bulkhead limit reached');
+      }
+      
+      try {
+        return await fn();
+      } finally {
+        this.bulkheadCounter--;
+      }
+    } catch (error) {
+      if (error.message !== 'Bulkhead limit reached') {
+        this.bulkheadCounter--;
+      }
+      throw error;
+    }
+  }
+
   /**
    * Get current circuit state
    */
@@ -163,6 +210,13 @@ export class CircuitBreaker {
         await this.stateRepository.setState(this.serviceName, tenantId, state);
       }
     }
+    
+    if (this.metricsCollector) {
+      await this.metricsCollector.track('circuit_breaker.success', {
+        service: this.serviceName,
+        state: this.state
+      });
+    }
   }
   
   /**
@@ -189,6 +243,13 @@ export class CircuitBreaker {
       // In half-open state, any failure trips the circuit
       await this.transitionState(tenantId, CircuitState.OPEN);
     }
+    
+    if (this.metricsCollector) {
+      await this.metricsCollector.track('circuit_breaker.failure', {
+        service: this.serviceName,
+        state: this.state
+      });
+    }
   }
   
   /**
@@ -214,6 +275,13 @@ export class CircuitBreaker {
     
     // Update state in repository
     await this.stateRepository.setState(this.serviceName, tenantId, state);
+    
+    if (this.metricsCollector) {
+      await this.metricsCollector.track('circuit_breaker.state_changed', {
+        service: this.serviceName,
+        state: newState
+      });
+    }
   }
   
   /**
@@ -248,15 +316,60 @@ export class CircuitBreaker {
   /**
    * Transitions the circuit to a new state
    */
-  transitionToState(newState: CircuitState): void {
+  async transitionToState(newState: CircuitState): Promise<void> {
+    if (this.state === newState) return;
+    
     this.state = newState;
     this.lastStateChange = Date.now();
     
-    if (newState === CircuitState.CLOSED) {
+    if (newState === CircuitState.CLOSED || newState === CircuitState.HALF_OPEN) {
       this.failureCount = 0;
       this.successCount = 0;
-    } else if (newState === CircuitState.HALF_OPEN) {
-      this.successCount = 0;
+    }
+    
+    if (this.metricsCollector) {
+      await this.metricsCollector.track('circuit_breaker.state_changed', {
+        service: this.serviceName,
+        state: newState
+      });
     }
   }
+}
+
+/**
+ * Create a circuit breaker factory that uses the same store
+ */
+export function createCircuitBreakerFactory(
+  metricsCollector: MetricsCollector,
+  defaultOptions: Partial<CircuitBreakerOptions> = {}
+) {
+  const breakers = new Map<string, CircuitBreaker>();
+  
+  return {
+    getBreaker(
+      serviceName: string,
+      options: Partial<CircuitBreakerOptions> = {}
+    ): CircuitBreaker {
+      const breakerKey = serviceName;
+      
+      if (!breakers.has(breakerKey)) {
+        const breakerOptions: CircuitBreakerOptions = {
+          failureThreshold: options.failureThreshold || defaultOptions.failureThreshold || 5,
+          resetTimeoutMs: options.resetTimeoutMs || defaultOptions.resetTimeoutMs || 30000,
+          successThreshold: options.successThreshold || defaultOptions.successThreshold || 1
+        };
+        
+        breakers.set(
+          breakerKey,
+          new CircuitBreaker(serviceName, breakerOptions, metricsCollector)
+        );
+      }
+      
+      return breakers.get(breakerKey)!;
+    },
+    
+    clearBreakers() {
+      breakers.clear();
+    }
+  };
 }

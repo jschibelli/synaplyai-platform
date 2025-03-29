@@ -146,7 +146,7 @@ describe('Text Rewrite Command', () => {
     
     test('should create a REPLACE_TEXT command from AI rewrite', async () => {
       // Execute handler
-      await textRewriteHandler(testCommand, testContext, testAnalysis);
+      await textRewriteHandler.execute(testCommand, testContext);
       
       // Verify REPLACE_TEXT command was executed with correct parameters
       expect(mockCommandRegistry.execute).toHaveBeenCalledWith({
@@ -169,7 +169,7 @@ describe('Text Rewrite Command', () => {
       });
       
       // Execute handler
-      const result = await textRewriteHandler(testCommand, testContext, testAnalysis);
+      const result = await textRewriteHandler.execute(testCommand, testContext);
       
       // Verify event structure
       expect(result).toMatchObject({
@@ -191,7 +191,7 @@ describe('Text Rewrite Command', () => {
       mockCommandRegistry.execute.mockRejectedValue(testError);
       
       // Execute handler and expect error
-      await expect(textRewriteHandler(testCommand, testContext, testAnalysis))
+      await expect(textRewriteHandler.execute(testCommand, testContext))
         .rejects
         .toThrow('Selection out of range');
     });

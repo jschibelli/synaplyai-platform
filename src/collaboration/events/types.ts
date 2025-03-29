@@ -1,18 +1,64 @@
-export interface DocumentEvent {
+/**
+ * Base event interface for document operations
+ */
+export interface BaseEvent {
   id: string;
-  documentId: string;
+  documentId?: string;  // Optional since some tests use aggregateId
   userId: string;
-  timestamp: number;
   type: string;
+  timestamp: number | string;
+  vectorClock?: Record<string, number>;
+  payload?: any;
+  
+  // Support for backward compatibility with tests
+  aggregateId?: string;  // Used instead of documentId in many tests
+  version?: number;
+  tenantId?: string;
+  metadata?: Record<string, any>;
+}
+
+// Ensure correct validation happens at runtime
+export function validateBaseEvent(event: BaseEvent): BaseEvent {
+  if (!event.documentId && !event.aggregateId) {
+    throw new Error('Event must have either documentId or aggregateId');
+  }
+  
+  // If aggregateId is present but documentId is not, copy it
+  if (!event.documentId && event.aggregateId) {
+    return {
+      ...event,
+      documentId: event.aggregateId
+    };
+  }
+  
+  return event;
+}
+
+/**
+ * Document event with position information
+ */
+export interface DocumentEvent extends BaseEvent {
+  // Position properties - different events use different patterns
   position?: number;
-  length?: number;
-  text?: string;
   startPosition?: number;
   endPosition?: number;
-  operation?: any;
-  vectorClock?: Record<string, number>;
-  version?: number;
-  metadata?: Record<string, any>;
+  
+  // Content properties
+  content?: string;
+  text?: string;
+  length?: number;
+  
+  // Format properties
+  attributes?: Record<string, any>;
+  
+  // Operation details
+  operation?: {
+    type: string;
+    position: number;
+    content?: string;
+    length?: number;
+    attributes?: Record<string, any>;
+  };
 }
 
 export interface TextInsertedEvent extends DocumentEvent {

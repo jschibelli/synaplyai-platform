@@ -5,6 +5,9 @@ import { DocumentContext } from './ContextProvider'; // Import only DocumentCont
 import { AIService } from './AIService';
 import { CircuitBreaker } from '../circuit-breaker/CircuitBreaker';
 import { MetricsCollector } from '../services/metrics/MetricsCollector';
+import { AIAnalysisResult } from './AIAnalysis';
+import { TenantContext } from '../lib/tenant-context';
+import { AICommandContext } from './AICommandContext'; // Change this line
 
 /**
  * Interface for AI command analysis parameters
@@ -19,21 +22,12 @@ export interface AIAnalysisParameters {
 }
 
 /**
- * Interface for AI command context parameters
- */
-export interface AICommandContext {
-  documentId: string;
-  userId: string;
-  tenantId: string;
-  context: DocumentContext;
-  parameters: AIAnalysisParameters;
-}
-
-/**
  * Interface for AI command
  */
 export interface AICommand {
   type: string;
+  documentId?: string;
+  userId?: string;
   requiresAIAnalysis: boolean;
   contextParameters?: AICommandContextParameters;
   executionParameters?: AICommandExecutionParameters;
@@ -55,8 +49,9 @@ export interface AIAnalysisResult {
 /**
  * AI Command options and configuration
  */
-export interface AICommandOptions {
-  [key: string]: any; // Allow additional properties for testing
+export interface AICommandOptions extends AICommand {
+  // Additional properties for tests
+  [key: string]: any;
 }
 
 /**
@@ -74,6 +69,9 @@ export interface AICommandContextParameters {
   fallbackToPartialContext?: boolean;
   allowMultipleIntents?: boolean;
   reuseContext?: boolean;
+  position?: number;  // Cursor position for context
+  selectionStart?: number;  // Start of selected text
+  selectionEnd?: number;    // End of selected text
   [key: string]: any; // Allow additional properties for testing
 }
 
@@ -109,6 +107,84 @@ export interface CompleteTextCommand extends AICommand {
   parameters?: AIAnalysisParameters;
   [key: string]: any; // Allow additional properties for testing
 }
+
+/**
+ * Execution parameters to control how commands are executed
+ */
+export interface AICommandExecutionParameters {
+  timeout?: number;  // Maximum execution time in ms
+  retries?: number;  // Number of retries on failure
+  priority?: 'high' | 'normal' | 'low';
+  
+  // Support for test compatibility
+  cleanupRequired?: boolean;
+  resourceLimits?: {
+    maxTokens?: number;
+    maxLatency?: number;
+    maxMemoryMB?: number;
+  };
+  rateLimit?: {
+    maxRequests?: number;
+    windowMs?: number;
+  };
+  concurrencyLimit?: number;
+  retryDelay?: number;
+  [key: string]: any; // Allow any test properties
+}
+
+/**
+ * Options for AI command execution
+ */
+export interface AICommandOptions {
+  type: string;
+  requiresAIAnalysis?: boolean;
+  executionParameters?: {
+    timeout?: number;
+    retries?: number;
+    priority?: 'high' | 'normal' | 'low';
+    
+    // Add test compatibility properties
+    cleanupRequired?: boolean;
+    resourceLimits?: {
+      maxTokens?: number;
+      maxLatency?: number;
+      maxMemoryMB?: number;
+    };
+    rateLimit?: {
+      maxRequests?: number;
+      windowMs?: number;
+    };
+    concurrencyLimit?: number;
+    retryDelay?: number;
+    [key: string]: any; // Allow any test properties
+  };
+  [key: string]: any; // Allow additional properties
+}
+
+/**
+ * Result of command validation
+ */
+export interface ValidationResult {
+  valid: boolean;
+  reason?: string;
+  errors?: string[];
+}
+
+/**
+ * Handler function for AI commands
+ * Supports both direct call and execute() method patterns for backward compatibility
+ */
+export interface AICommandHandler<T = any, R = any> {
+  (command: T, context: AICommandContext): Promise<R>;
+  execute?: (command: T, context: AICommandContext) => Promise<R>;
+}
+
+/**
+ * Validator function for AI commands
+ */
+export type AICommandValidator = (
+  command: AICommand
+) => Promise<ValidationResult> | ValidationResult;
 
 /**
  * AI Command Registry
@@ -217,3 +293,36 @@ export class AICommandRegistry {
     return null;
   }
 }
+
+// Define command types for test compatibility
+export interface GrammarCheckCommand extends AICommand {
+  type: 'GRAMMAR_CHECK';
+  selectionStart: number;
+  selectionEnd: number;
+}
+
+export interface CompleteTextCommand extends AICommand {
+  type: 'COMPLETE_TEXT';
+  position: number;
+  maxTokens?: number;
+}
+
+export interface SemanticRewriteCommand extends AICommand {
+  type: 'SEMANTIC_REWRITE';
+  selectionStart: number;
+  selectionEnd: number;
+  intent: {
+    tone?: string;
+    style?: string;
+    audience?: string;
+    [key: string]: any;
+  };
+}
+
+export interface TextRewriteCommand extends AICommand {
+  type: 'TEXT_REWRITE';
+  selectionStart: number;
+  selectionEnd: number;
+  instructions: string;
+}
+

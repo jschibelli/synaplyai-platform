@@ -10,12 +10,18 @@ import {
   Conflict
 } from './types';
 
+// Export ConflictType for tests
+export { ConflictType } from './types';
+
 /**
  * Base operation interface for document editing operations
  */
 export interface Operation {
-  type: 'insert' | 'delete' | 'replace' | 'format' | 'move';
+  type: 'insert' | 'delete' | 'replace' | 'format' | 'move' | string; // Add string to accept any string type
   position: number;
+  content?: string;
+  length?: number;
+  attributes?: Record<string, any>;
 }
 
 /**
@@ -96,7 +102,7 @@ export class ConflictDetector {
   /**
    * Detects potential conflicts between two events using vector clocks
    */
-  detectConflict(localEvent: DocumentEvent, remoteEvent: DocumentEvent): Conflict | null {
+  detectConflict(localEvent: DocumentEvent, remoteEvent: DocumentEvent): ConflictDetectionResult {
     const startTime = performance.now();
     
     try {
@@ -119,11 +125,14 @@ export class ConflictDetector {
       
       // Create conflict object with appropriate severity and description
       const conflict: Conflict = {
+        id: `conflict-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        documentId: localEvent.documentId || localEvent.aggregateId || 'unknown',
         type: conflictType,
         localEvent,
         remoteEvent,
         severity: this.determineSeverity(conflictType, localEvent, remoteEvent),
-        description: this.generateDescription(conflictType, localEvent, remoteEvent)
+        description: this.generateDescription(conflictType, localEvent, remoteEvent),
+        createdAt: Date.now()
       };
       
       // Record metrics
@@ -461,7 +470,7 @@ export class ConflictDetector {
     const op2End = op2.operation.position + (this.getOperationLength(op2.operation) || 0);
     
     // Check if ranges overlap
-    const overlap = this.doRangesOverlap(
+    const overlap = this.checkRangeOverlap(
       op1.operation.position, 
       op1End,
       op2.operation.position,
@@ -514,20 +523,19 @@ export class ConflictDetector {
   /**
    * Helper to get the effective length of an operation
    */
-  private getOperationLength(op: Operation): number {
-    switch (op.type) {
+  private getOperationLength(operation: Operation): number {
+    switch (operation.type) {
       case 'insert':
-        return (op as InsertOperation).text.length;
+        return operation.content?.length || 0;
       case 'delete':
-        return (op as DeleteOperation).length;
       case 'replace':
-        return (op as ReplaceOperation).length;
       case 'format':
-        return (op as FormatOperation).length;
+        return operation.length || 0;
       case 'move':
-        return (op as MoveOperation).length;
+        return (operation as any).endPosition - (operation as any).startPosition || 0;
       default:
-        return 0;
+        // Handle any other string types
+        return operation.length || (operation.content?.length || 0);
     }
   }
 
@@ -542,7 +550,7 @@ export class ConflictDetector {
   /**
    * Detects a conflict between two versioned operations
    */
-  detectConflict(
+  detectVersionedConflict(
     op1: VersionedOperation, 
     op2: VersionedOperation,
     clock1?: Record<string, number>, 
@@ -600,7 +608,7 @@ export class ConflictDetector {
     const op2End = getPosition(op2) + getLength(op2);
     
     // Check for overlap
-    const overlap = this.doRangesOverlap(
+    const overlap = this.checkRangeOverlap(
       getPosition(op1),
       op1End,
       getPosition(op2),
@@ -650,7 +658,7 @@ export class ConflictDetector {
   /**
    * Check if two ranges overlap
    */
-  private doRangesOverlap(
+  private checkRangeOverlap(
     start1: number, 
     end1: number, 
     start2: number, 

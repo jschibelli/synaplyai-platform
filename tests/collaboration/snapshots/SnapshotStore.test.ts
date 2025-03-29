@@ -148,7 +148,7 @@ describe('SnapshotStore', () => {
       prisma.snapshot.findFirst.mockResolvedValue(mockSnapshot);
       
       // Get latest snapshot
-      const result = await snapshotStore.getLatestSnapshot('doc-1');
+      const result = await snapshotStore.getLatestSnapshot('doc-1', 'tenant-1');
       
       // Verify correct query parameters
       expect(prisma.snapshot.findFirst).toHaveBeenCalledWith({
@@ -178,7 +178,7 @@ describe('SnapshotStore', () => {
     test('should return null when no snapshot exists', async () => {
       prisma.snapshot.findFirst.mockResolvedValue(null);
       
-      const result = await snapshotStore.getLatestSnapshot('doc-1');
+      const result = await snapshotStore.getLatestSnapshot('doc-1', 'tenant-1');
       
       expect(result).toBeNull();
       expect(metricsCollector.track).toHaveBeenCalledWith(
@@ -205,12 +205,12 @@ describe('SnapshotStore', () => {
       prisma.snapshot.findFirst.mockResolvedValue(mockSnapshot);
       
       // First call should query database
-      const result1 = await snapshotStore.getLatestSnapshot('doc-1');
+      const result1 = await snapshotStore.getLatestSnapshot('doc-1', 'tenant-1');
       expect(result1).toEqual(mockSnapshot);
       expect(prisma.snapshot.findFirst).toHaveBeenCalledTimes(1);
       
       // Second call should use cache
-      const result2 = await snapshotStore.getLatestSnapshot('doc-1');
+      const result2 = await snapshotStore.getLatestSnapshot('doc-1', 'tenant-1');
       expect(result2).toEqual(mockSnapshot);
       
       // Database should not be queried again
@@ -232,13 +232,13 @@ describe('SnapshotStore', () => {
       prisma.snapshot.findFirst.mockResolvedValue(mockSnapshot);
       
       // First call to populate cache
-      await snapshotStore.getLatestSnapshot('doc-1');
+      await snapshotStore.getLatestSnapshot('doc-1', 'tenant-1');
       
       // Clear cache
       snapshotStore.clearCache('doc-1');
       
       // Next call should query database again
-      await snapshotStore.getLatestSnapshot('doc-1');
+      await snapshotStore.getLatestSnapshot('doc-1', 'tenant-1');
       expect(prisma.snapshot.findFirst).toHaveBeenCalledTimes(2);
     });
   });
@@ -433,3 +433,19 @@ describe('SnapshotStore', () => {
     });
   });
 });
+
+// Fix timestamps
+const mockSnapshot = {
+  id: 'snapshot-1',
+  documentId: 'doc-1',
+  tenantId: 'tenant-1',
+  state: { content: 'test' },
+  version: 10,
+  timestamp: new Date().toISOString(), // Convert to string
+  lastEventId: 'event-10',
+  data: { content: 'test' }, // Add missing properties
+  metadata: {} // Add missing properties
+};
+
+// Fix getLatestSnapshot calls
+await snapshotStore.getLatestSnapshot('doc-1', 'tenant-1');

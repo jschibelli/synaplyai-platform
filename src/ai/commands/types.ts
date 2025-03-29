@@ -1,43 +1,65 @@
+import { TenantContext } from '../../lib/tenant-context';
+
 /**
- * Command context parameters for AI commands
+ * Parameters for context gathering
  */
 export interface AICommandContextParameters {
   windowSize: number;
   includePreceding: boolean;
   includeFollowing: boolean;
   includeDocument: boolean;
-  includeMetadata?: boolean;
-  position?: number;
+  trackReferences?: boolean;
+  trackCollaborativeChanges?: boolean;
+  streamResponse?: boolean;
+  validateStructure?: boolean;
+  trackUserPresence?: boolean;
 }
 
 /**
- * Context for AI command execution
+ * Context for AI commands
  */
 export interface AICommandContext {
-  selectedText?: string;
-  precedingText?: string;
-  followingText?: string;
-  documentMetadata?: any;
-  tenantContext?: {
-    tenantId: string;
-    userId: string;
+  documentId: string;
+  userId: string;
+  tenantId: string;
+  document?: any;
+  selection?: {
+    start: number;
+    end: number;
+    text: string;
   };
-  onProgress?: (update: string) => void;
-  onToken?: (token: any) => void;
-  [key: string]: any;
+  context?: {
+    preceding?: string;
+    following?: string;
+  };
+  tenantContext?: TenantContext;
+  onProgress?: (progress: any) => void;
+  references?: Array<{
+    id: string;
+    text: string;
+    source: string;
+  }>;
+  collaborativeState?: {
+    activeUsers?: string[];
+    userCursors?: Record<string, number>;
+    userSelections?: Record<string, { start: number; end: number }>;
+  };
+  featureFlags?: Record<string, boolean>;
 }
 
 /**
- * AI analysis result type
+ * AI analysis result
  */
 export interface AIAnalysisResult {
   content: string;
-  metadata?: any;
-  totalTokens?: number;
-  promptTokens?: number;
-  completionTokens?: number;
   modelId?: string;
-  confidence?: number;
+  tokenUsage?: {
+    prompt: number;
+    completion: number;
+    total: number;
+  };
+  metadata?: Record<string, any>;
+  cleanup?: () => Promise<void>;
 }
 
 /**
@@ -58,19 +80,46 @@ export interface TextCompletedEvent {
 }
 
 /**
- * Analysis parameters for AI commands
+ * AI analysis parameters
  */
 export interface AIAnalysisParameters {
   type: string;
   model?: string;
   temperature?: number;
   maxTokens?: number;
-  cache?: boolean;
-  content?: string;
-  [key: string]: any;
+  topP?: number;
+  stream?: boolean;
+  prompt?: string;
+  formatAs?: string;
+  additionalInstructions?: string;
+  contextEnhancement?: {
+    includeFormatting?: boolean;
+    includeMetadata?: boolean;
+    includeSections?: boolean;
+  };
 }
 
 /**
  * Handler type for AI commands
  */
 export type AICommandHandler<T, R> = (command: T, context: AICommandContext, analysis?: AIAnalysisResult) => Promise<R>;
+
+/**
+ * Base AI command options
+ */
+export interface AICommandOptions {
+  type: string;
+  contextParameters?: AICommandContextParameters;
+  executionParameters?: {
+    timeout?: number;
+    retries?: number;
+    retryDelay?: number;
+    priority?: 'high' | 'normal' | 'low';
+    cleanupRequired?: boolean;
+    rateLimit?: {
+      maxRequests: number;
+      perTimeWindow: number;
+    };
+  };
+  requiresAIAnalysis: boolean;
+}

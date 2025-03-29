@@ -152,7 +152,11 @@ export class VectorClock {
    * Makes VectorClock compatible with Record<string, number>
    */
   toRecord(): Record<string, number> {
-    return { ...this.clock };
+    const result = this.getClock();
+    if (typeof result === 'number') {
+      throw new Error('Cannot convert single clock value to record');
+    }
+    return result;
   }
 
   /**

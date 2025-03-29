@@ -118,9 +118,9 @@ export interface Conflict {
   resolvedAt?: number;
   resolution?: ConflictResolution;
   
-  // For backward compatibility with tests
-  local?: any;
-  remote?: any;
+  // Support for backward compatibility with tests
+  local?: BaseEvent;
+  remote?: BaseEvent;
   localRegion?: { start: number; end: number; };
   remoteRegion?: { start: number; end: number; };
 }

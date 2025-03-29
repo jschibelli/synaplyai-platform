@@ -2,43 +2,32 @@ import { AsyncLocalStorage } from 'async_hooks';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
- * Tenant context information
+ * Tenant context interface
  */
 export interface TenantContext {
   tenantId: string;
-  userId?: string;        // Keep optional for flexibility
+  userId: string;
+  requestId: string;
   traceId?: string;
-  requestId?: string;
-  sessionId?: string;
-  [key: string]: any;     // Allow additional properties
+  features?: Record<string, boolean>;
+  roles?: string[];
 }
 
-// Store tenant context in AsyncLocalStorage
-const tenantContextStorage = new AsyncLocalStorage<TenantContext>();
+// Create AsyncLocalStorage for tenant context
+export const tenantContextStorage = new AsyncLocalStorage<TenantContext>();
 
 /**
- * Create a new tenant context
+ * Set the current tenant context for the async scope
  */
-export function createTenantContext(tenantId: string, userId: string, additionalContext: Partial<TenantContext> = {}): TenantContext {
-  return {
-    tenantId,
-    userId,
-    ...additionalContext
-  };
+export function setCurrentTenantContext(context: TenantContext): void {
+  tenantContextStorage.enterWith(context);
 }
 
 /**
- * Run a function within a tenant context
+ * Get the current tenant context from async scope
  */
-export function runWithTenantContext<T>(tenantContext: TenantContext, fn: () => T): T {
-  return tenantContextStorage.run(tenantContext, fn);
-}
-
-/**
- * Run an async function within a tenant context
- */
-export async function runWithTenantContextAsync<T>(tenantContext: TenantContext, fn: () => Promise<T>): Promise<T> {
-  return tenantContextStorage.run(tenantContext, fn);
+export function getCurrentTenantContext(): TenantContext | undefined {
+  return tenantContextStorage.getStore();
 }
 
 /**
@@ -55,6 +44,90 @@ export function getCurrentTenantId(): string | undefined {
 export function getCurrentUserId(): string | undefined {
   const context = tenantContextStorage.getStore();
   return context?.userId;
+}
+
+/**
+ * Create a middleware to set tenant context for requests
+ */
+export function tenantContextMiddleware() {
+  return (req: any, res: any, next: Function) => {
+    const tenantId = req.headers['x-tenant-id'] || 'default';
+    const userId = req.headers['x-user-id'] || 'anonymous';
+    const requestId = req.headers['x-request-id'] || generateRequestId();
+    const traceId = req.headers['x-trace-id'] || requestId;
+    
+    const context: TenantContext = {
+      tenantId,
+      userId,
+      requestId,
+      traceId
+    };
+    
+    tenantContextStorage.run(context, () => {
+      next();
+    });
+  };
+}
+
+/**
+ * Generate a unique request ID
+ */
+function generateRequestId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).substring(2);
+}
+
+/**
+ * Helper to run a function with a specific tenant context
+ */
+export async function runWithTenantContext<T>(context: TenantContext, fn: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    tenantContextStorage.run(context, async () => {
+      try {
+        const result = await fn();
+        resolve(result);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
+/**
+ * Create a test tenant context for use in tests
+ */
+export function createTestTenantContext(overrides?: Partial<TenantContext>): TenantContext {
+  return {
+    tenantId: 'test-tenant',
+    userId: 'test-user',
+    requestId: 'test-request-id',
+    ...overrides
+  };
+}
+
+/**
+ * Create a new tenant context
+ */
+export function createTenantContext(tenantId: string, userId: string, additionalContext: Partial<TenantContext> = {}): TenantContext {
+  return {
+    tenantId,
+    userId,
+    requestId: additionalContext.requestId || generateRequestId(), // Add a default requestId
+    ...additionalContext
+  };
+}
+
+/**
+ * Run a function within a tenant context
+ */
+export function runWithTenantContextSync<T>(tenantContext: TenantContext, fn: () => T): T {
+  return tenantContextStorage.run(tenantContext, fn);
+}
+
+/**
+ * Run an async function within a tenant context
+ */
+export async function runWithTenantContextAsync<T>(tenantContext: TenantContext, fn: () => Promise<T>): Promise<T> {
+  return tenantContextStorage.run(tenantContext, fn);
 }
 
 /**
@@ -78,28 +151,6 @@ export function clearTenantContext(): void {
   // Note: AsyncLocalStorage doesn't have a direct way to clear context
   // Setting an empty context is the closest equivalent
   tenantContextStorage.enterWith({} as any);
-}
-
-/**
- * Middleware to set tenant context for HTTP requests
- */
-export function tenantContextMiddleware() {
-  return (req: any, res: any, next: () => void) => {
-    const tenantId = req.headers['x-tenant-id'] || req.query.tenantId;
-    const userId = req.headers['x-user-id'] || req.query.userId || req.user?.id;
-    
-    if (!tenantId || !userId) {
-      return next();
-    }
-    
-    const tenantContext = createTenantContext(tenantId, userId, {
-      roles: req.user?.roles || [],
-      // Add any additional context from request
-      requestId: req.id
-    });
-    
-    runWithTenantContext(tenantContext, next);
-  };
 }
 
 /**
@@ -127,14 +178,15 @@ export function verifyTenantAccess(resourceTenantId: string): void {
 /**
  * Set the current tenant context with individual properties
  */
-export function setCurrentTenantContext(
+export function setCurrentTenantContextWithProperties(
   tenantId: string,
-  userId?: string,
+  userId: string, // Make userId required
   options: { traceId?: string; requestId?: string; sessionId?: string } = {}
 ): void {
   const context: TenantContext = {
     tenantId,
     userId,
+    requestId: options.requestId || generateRequestId(), // Add a default requestId
     ...options
   };
   setTenantContext(context);
@@ -156,6 +208,3 @@ export function setDefaultTenantContext() {
 if (process.env.NODE_ENV !== 'production') {
   setDefaultTenantContext();
 }
-
-// Export storage for direct access in tests
-export { tenantContextStorage };

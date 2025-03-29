@@ -4,12 +4,58 @@ import { MetricsCollector } from '../../../src/services/metrics/MetricsCollector
 import { RedisCircuitBreakerStore } from '../../../src/circuit-breaker/redis-store';
 import { CircuitBreaker } from '../../../src/circuit-breaker/interfaces';
 
+// Add this at the top of your file after imports
+
+// Extend the MetricsCollector for testing
+declare module '../../../src/services/metrics/MetricsCollector' {
+  interface MetricsCollector {
+    track(name: string, data: Record<string, any>): void;
+    recordValue(name: string, value: number, tags?: Record<string, any>): void;
+  }
+}
+
+// Define the interface needed for tests
+interface AICommandOptions {
+  type: string;
+  requiresAIAnalysis?: boolean;
+  executionParameters?: {
+    timeout?: number;
+    retries?: number;
+    priority?: 'high' | 'normal' | 'low';
+    cleanupRequired?: boolean;
+    resourceLimits?: {
+      maxTokens?: number;
+      maxLatency?: number;
+      maxMemoryMB?: number;
+    };
+    rateLimit?: {
+      maxRequests?: number;
+      windowMs?: number;
+    };
+    concurrencyLimit?: number;
+    retryDelay?: number;
+  };
+}
+
+// Extend TenantContext interface for your test
+interface EnhancedTenantContext extends TenantContext {
+  getCurrentTenant: jest.Mock;
+}
+
 describe('AICommandRegistry', () => {
   let aiCommandRegistry: AICommandRegistry;
-  let mockTenantContext: jest.Mocked<TenantContext>;
+  let mockTenantContext: jest.Mocked<EnhancedTenantContext>;
   let mockMetricsCollector: jest.Mocked<MetricsCollector>;
   let mockCircuitBreakerStore: jest.Mocked<RedisCircuitBreakerStore>;
   let mockCircuitBreaker: jest.Mocked<CircuitBreaker>;
+
+  // Near the top of your test file, update your mock setup:
+
+  // Create a properly typed interface to match what your tests expect
+  interface EnhancedMetricsCollector extends MetricsCollector {
+    recordValue: jest.Mock;
+    track: jest.Mock;
+  }
 
   beforeEach(() => {
     // Setup mock circuit breaker
@@ -17,21 +63,31 @@ describe('AICommandRegistry', () => {
       execute: jest.fn().mockImplementation((fn) => fn())
     } as any;
 
-    // Setup mock dependencies
+    // Setup mock dependencies with correct typing
     mockTenantContext = {
-      getCurrentTenant: jest.fn().mockReturnValue('test-tenant-1')
-    } as any;
+      getCurrentTenant: jest.fn().mockReturnValue({
+        id: 'test-tenant-1',
+        name: 'Test Tenant'
+      }),
+      getTenantId: jest.fn().mockReturnValue('test-tenant-1'),
+      getUserId: jest.fn().mockReturnValue('test-user'),
+      tenantId: 'test-tenant-1',
+      userId: 'test-user'
+    } as unknown as jest.Mocked<EnhancedTenantContext>;
 
-    // FIX: Use consistent interface for metrics collector
-    mockMetricsCollector = {
-      increment: jest.fn().mockResolvedValue(undefined),
-      recordLatency: jest.fn().mockResolvedValue(undefined),
-      recordValue: jest.fn().mockResolvedValue(undefined),
-      track: jest.fn().mockResolvedValue(undefined),
-      setCircuitBreakerState: jest.fn().mockResolvedValue(undefined),
-      incrementCircuitBreakerFailures: jest.fn().mockResolvedValue(undefined),
-      incrementCircuitBreakerRejections: jest.fn().mockResolvedValue(undefined)
-    } as any;
+    // CHANGE THIS PART: Create the metrics collector mock with proper typing
+    const mockMetricsCollectorObject = {
+      increment: jest.fn(),
+      recordLatency: jest.fn(),
+      recordValue: jest.fn(),
+      track: jest.fn(),
+      incrementCounter: jest.fn(),
+      getAverageValue: jest.fn().mockReturnValue(0),
+      getPercentileLatency: jest.fn().mockReturnValue(0)
+    };
+    
+    // Type assertion that preserves both interface and mock methods
+    mockMetricsCollector = mockMetricsCollectorObject as unknown as jest.Mocked<EnhancedMetricsCollector>;
 
     mockCircuitBreakerStore = {
       getBreaker: jest.fn().mockResolvedValue(mockCircuitBreaker)
@@ -460,7 +516,7 @@ describe('AICommandRegistry', () => {
         type: 'LOW_PRIORITY',
         requiresAIAnalysis: true,
         executionParameters: {
-          priority: 'low'
+          priority: 'low' as 'low'
         }
       };
 
@@ -468,7 +524,7 @@ describe('AICommandRegistry', () => {
         type: 'HIGH_PRIORITY',
         requiresAIAnalysis: true,
         executionParameters: {
-          priority: 'high'
+          priority: 'high' as 'high'
         }
       };
 

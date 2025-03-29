@@ -1,5 +1,5 @@
-import { RedisClient } from '../redis/RedisClient';
-import { TenantContext } from '../tenant/TenantContext';
+import { mockRedisClient } from '../../redis/mockRedisClient';
+import { TenantContext } from '../../tenant/TenantContext';
 
 interface MetricData {
   name: string;
@@ -17,11 +17,171 @@ interface MetricsBucket {
   p95: number;
 }
 
-export class MetricsCollector {
-  constructor(
-    private redisClient: RedisClient,
-    private tenantContext: TenantContext
-  ) {}
+export interface MetricsCollector {
+  increment(metric: string, tags?: Record<string, string>): Promise<void>;
+  incrementCounter(key: string, tags?: Record<string, string>): Promise<number>;
+  decrementCounter(key: string, tags?: Record<string, string>): Promise<number>;
+  recordLatency(metric: string, value: number, tags?: Record<string, string>): Promise<void>;
+  recordValue(metric: string, value: number, tags?: Record<string, string>): Promise<void>;
+  getCounter(metric: string, tags?: Record<string, string>): Promise<number>;
+  getAverageValue(metric: string, tags?: Record<string, string>): Promise<number>;
+  track(eventName: string, properties?: Record<string, any>): Promise<void>;
+}
+
+/**
+ * Metrics collector implementation
+ */
+export class MetricsCollector implements MetricsCollector {
+  private metrics: Map<string, number> = new Map();
+  private redisClient: any;
+
+  constructor(redisClient: any) {
+    this.redisClient = redisClient;
+  }
+
+  /**
+   * Increment a counter
+   */
+  async increment(metric: string, tags?: Record<string, string>): Promise<void> {
+    const key = this.formatKey(metric, tags);
+    const currentValue = this.metrics.get(key) || 0;
+    this.metrics.set(key, currentValue + 1);
+    
+    // Also store in Redis for persistence
+    await this.redisClient.incr(key);
+  }
+
+  /**
+   * Increment a counter and return the new value
+   */
+  async incrementCounter(key: string, tags?: Record<string, string>): Promise<number> {
+    const metricKey = this.formatKey(key, tags);
+    const currentValue = this.metrics.get(metricKey) || 0;
+    const newValue = currentValue + 1;
+    this.metrics.set(metricKey, newValue);
+    
+    // Also store in Redis for persistence
+    await this.redisClient.incr(metricKey);
+    
+    return newValue;
+  }
+
+  /**
+   * Decrement a counter and return the new value
+   */
+  async decrementCounter(key: string, tags?: Record<string, string>): Promise<number> {
+    const metricKey = this.formatKey(key, tags);
+    const currentValue = this.metrics.get(metricKey) || 0;
+    const newValue = Math.max(0, currentValue - 1);
+    this.metrics.set(metricKey, newValue);
+    
+    // Also store in Redis for persistence
+    await this.redisClient.decr(metricKey);
+    
+    return newValue;
+  }
+
+  /**
+   * Record a latency value
+   */
+  async recordLatency(metric: string, value: number, tags?: Record<string, string>): Promise<void> {
+    // For latency we use different Redis structures
+    const key = this.formatKey(metric, tags);
+    
+    // Store the individual value
+    await this.redisClient.rPush(`${key}:values`, value.toString());
+    
+    // Update the running average
+    const avgKey = `${key}:avg`;
+    const countKey = `${key}:count`;
+    
+    const count = parseInt(await this.redisClient.get(countKey) || '0') + 1;
+    const currentAvg = parseFloat(await this.redisClient.get(avgKey) || '0');
+    
+    const newAvg = ((currentAvg * (count - 1)) + value) / count;
+    
+    await this.redisClient.set(avgKey, newAvg.toString());
+    await this.redisClient.set(countKey, count.toString());
+  }
+
+  /**
+   * Record a numeric value
+   */
+  async recordValue(metric: string, value: number, tags?: Record<string, string>): Promise<void> {
+    const key = this.formatKey(metric, tags);
+    
+    // Store the individual value
+    await this.redisClient.rPush(`${key}:values`, value.toString());
+    
+    // Update the running average
+    const avgKey = `${key}:avg`;
+    const countKey = `${key}:count`;
+    
+    const count = parseInt(await this.redisClient.get(countKey) || '0') + 1;
+    const currentAvg = parseFloat(await this.redisClient.get(avgKey) || '0');
+    
+    const newAvg = ((currentAvg * (count - 1)) + value) / count;
+    
+    await this.redisClient.set(avgKey, newAvg.toString());
+    await this.redisClient.set(countKey, count.toString());
+  }
+
+  /**
+   * Get a counter value
+   */
+  async getCounter(metric: string, tags?: Record<string, string>): Promise<number> {
+    const key = this.formatKey(metric, tags);
+    const value = await this.redisClient.get(key);
+    return parseInt(value || '0');
+  }
+
+  /**
+   * Get the average value of a metric
+   */
+  async getAverageValue(metric: string, tags?: Record<string, string>): Promise<number> {
+    const key = this.formatKey(metric, tags);
+    const avgKey = `${key}:avg`;
+    
+    const value = await this.redisClient.get(avgKey);
+    return parseFloat(value || '0');
+  }
+
+  /**
+   * Track an event with properties
+   */
+  async track(eventName: string, properties?: Record<string, any>): Promise<void> {
+    const event = {
+      name: eventName,
+      timestamp: new Date().toISOString(),
+      ...properties
+    };
+    
+    // Store event in Redis
+    await this.redisClient.rPush('events', JSON.stringify(event));
+    
+    // For each property, increment a counter
+    if (properties) {
+      for (const [key, value] of Object.entries(properties)) {
+        if (typeof value === 'string') {
+          const metricKey = `${eventName}.${key}.${value}`;
+          await this.increment(metricKey);
+        }
+      }
+    }
+  }
+
+  /**
+   * Format a metric key with tags
+   */
+  private formatKey(metric: string, tags?: Record<string, string>): string {
+    if (!tags) return metric;
+    
+    const tagString = Object.entries(tags)
+      .map(([k, v]) => `${k}:${v}`)
+      .join('.');
+    
+    return `${metric}.${tagString}`;
+  }
 
   async trackMetric(data: MetricData): Promise<boolean> {
     const timestamp = data.timestamp || Date.now();

@@ -6,72 +6,76 @@ import { CircuitState } from '../lib/circuit-breaker';
 
 // Consolidated MetricsCollector interface
 export interface IMetricsCollector {
-  // Core metrics methods
-  increment(metricName: string, tenantId: string, value?: number): Promise<void>;
-  recordLatency(metricName: string, latencyMs: number, tenantId: string): Promise<void>;
-  getPercentileLatency(metricName: string, tenantId: string, percentile: number): Promise<number | null>;
-  
-  // Circuit breaker methods
-  setCircuitBreakerState(tenantId: string, serviceName: string, state: CircuitState | string): Promise<void>;
-  incrementCircuitBreakerFailures(tenantId: string, serviceName: string): Promise<void>;
-  incrementCircuitBreakerRejections(tenantId: string, serviceName: string): Promise<void>;
-  getCircuitBreakerState?(tenantId: string, serviceName: string): Promise<CircuitState | null>;
-  
-  // Content filtering methods
-  incrementFilterResult?(filterName: string, result: string): Promise<void>;
-  recordFilterLatency?(filterName: string, latencyMs: number): Promise<void>;
-  recordPipelineLatency?(latencyMs: number): Promise<void>;
-  incrementPipelineResult?(result: string): Promise<void>;
-  incrementPipelineErrors?(): Promise<void>;
-  
-  // Additional tracking methods
-  recordValue?(metricName: string, value: number, tenantId?: string): Promise<void>;
-  getAverageValue?(metricName: string, options?: any): Promise<number>;
-  getCountValue?(metricName: string, options?: any): Promise<number>;
-  track?(metricName: string, value: number, tags?: Record<string, any>): Promise<void>;
-  trackValue?(name: string, value: number, tags?: Record<string, string | number>): Promise<void>;
-  reset?(): Promise<void>;
+  increment(metric: string, tags?: Record<string, string>): Promise<void>;
+  incrementCounter(key: string, tags?: Record<string, string>): Promise<number>;
+  decrementCounter(key: string, tags?: Record<string, string>): Promise<number>;
+  recordLatency(metric: string, value: number, tags?: Record<string, string>): Promise<void>;
+  recordValue(metric: string, value: number, tags?: Record<string, string>): Promise<void>;
+  getCounter(metric: string, tags?: Record<string, string>): Promise<number>;
+  getAverageValue(metric: string, tags?: Record<string, string>): Promise<number>;
+  track(eventName: string, properties?: Record<string, any>): Promise<void>;
 }
 
 // AI Command interfaces
 export interface AICommandOptions {
-  id?: string | number;
+  type: string;
+  contextParameters?: AICommandContextParameters;
   executionParameters?: {
     timeout?: number;
     retries?: number;
+    retryDelay?: number;
     priority?: 'high' | 'normal' | 'low';
+    cleanupRequired?: boolean;
+    rateLimit?: {
+      maxRequests: number;
+      perTimeWindow: number;
+    };
   };
+  requiresAIAnalysis: boolean;
 }
 
 export interface DocumentContext {
   documentId: string;
-  tenantId?: string;
-  userId?: string;
-  selectedText?: string;
-  precedingText?: string;
-  followingText?: string;
-  documentMetadata?: Record<string, any>;
-  getContext?: (parameters: any) => Promise<any>;
-  onToken?: (token: string) => void;
+  content: string;
+  userId: string;
+  tenantId: string;
+  position?: number;
+  selection?: {
+    start: number;
+    end: number;
+    text: string;
+  };
+  metadata?: Record<string, any>;
+  formatting?: Record<string, any>;
 }
 
 export interface AIAnalysisResult {
-  content: string;        // Was incorrectly referenced as 'text' in tests
-  modelId: string;
-  totalTokens: number;
-  promptTokens: number;
-  completionTokens: number;
+  content: string;
+  modelId?: string;
+  tokenUsage?: {
+    prompt: number;
+    completion: number;
+    total: number;
+  };
   metadata?: Record<string, any>;
+  cleanup?: () => Promise<void>;
 }
 
 // CircuitBreaker interfaces
 export interface ICircuitBreaker {
-  execute<T>(command: () => Promise<T>): Promise<T>;
+  state: CircuitState;
+  failureCount: number;
+  successCount: number;
+  lastStateChange: number;
+  serviceName: string;
+  
+  execute<T>(fn: () => Promise<T>): Promise<T>;
+  executeWithBulkhead<T>(fn: () => Promise<T>, concurrencyLimit: number): Promise<T>;
+  transitionToState(newState: CircuitState): Promise<void>;
   getState(): Promise<CircuitState>;
   recordSuccess(): Promise<void>;
-  recordFailure(error: Error): Promise<void>;
-  transitionState(newState: CircuitState): Promise<void>;
-  shouldAttemptReset(): boolean;
+  recordFailure(): Promise<void>;
+  shouldAttemptReset(): Promise<boolean>;
 }
 
 // Content Filtering interfaces
@@ -83,9 +87,7 @@ export interface ContentFilterResult {
 
 export interface ContentFilter {
   name: string;
-  executionStrategy: 'SYNC' | 'PARALLEL';
-  priority: number;
-  filter: (content: string) => Promise<ContentFilterResult>;
+  filter(content: string): Promise<ContentFilterResult>;
 }
 
 // TenantContext interface
@@ -102,13 +104,12 @@ export interface AICommandContextParameters {
   windowSize: number;
   includePreceding: boolean;
   includeFollowing: boolean;
-  includeDocument: boolean;  // Missing in many tests
+  includeDocument: boolean;
   trackReferences?: boolean;
   trackCollaborativeChanges?: boolean;
   streamResponse?: boolean;
   validateStructure?: boolean;
   trackUserPresence?: boolean;
-  [key: string]: any;  // Allow additional properties
 }
 
 // Circuit breaker interfaces
@@ -132,14 +133,18 @@ export interface CircuitBreakerStore {
   resetCounters(key: string): Promise<void>;
   getLastStateChange(key: string): Promise<Date | null>;
   setLastStateChange(key: string, date: Date): Promise<void>;
+  incrementCounter(key: string, tags?: Record<string, string>): Promise<number>;
+  decrementCounter(key: string, tags?: Record<string, string>): Promise<number>;
 }
 
 // Metrics collector interface
 export interface MetricsCollector {
-  increment(metricName: string, tenantId: string, value?: number): Promise<void>;
-  recordLatency(metricName: string, latencyMs: number, tenantId: string): Promise<void>;
-  recordValue(metricName: string, value: number, tenantId?: string): Promise<void>;
-  setCircuitBreakerState(tenantId: string, serviceName: string, state: string | CircuitState): Promise<void>;
-  incrementCircuitBreakerFailures(tenantId: string, serviceName: string): Promise<void>;
-  incrementCircuitBreakerRejections(tenantId: string, serviceName: string): Promise<void>;
+  increment(metric: string, tags?: Record<string, string>): Promise<void>;
+  incrementCounter(key: string, tags?: Record<string, string>): Promise<number>;
+  decrementCounter(key: string, tags?: Record<string, string>): Promise<number>;
+  recordLatency(metric: string, value: number, tags?: Record<string, string>): Promise<void>;
+  recordValue(metric: string, value: number, tags?: Record<string, string>): Promise<void>;
+  getCounter(metric: string, tags?: Record<string, string>): Promise<number>;
+  getAverageValue(metric: string, tags?: Record<string, string>): Promise<number>;
+  track(eventName: string, properties?: Record<string, any>): Promise<void>;
 }
