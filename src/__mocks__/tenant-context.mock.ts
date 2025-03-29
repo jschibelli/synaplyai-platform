@@ -22,7 +22,7 @@ export const tenantContextStorage = {
     }
   }
 };
-=======
+
 export function mockTenantContext(tenantId = 'test-tenant', userId = 'test-user') {
   return {
     tenantId,
@@ -38,5 +38,5 @@ export const clearTenantContextMock = jest.fn();
 export const getCurrentTenantIdMock = jest.fn().mockReturnValue('test-tenant');
 export const getCurrentUserIdMock = jest.fn().mockReturnValue('test-user');
 export const setCurrentTenantContext = jest.fn();
-=======
+
 
