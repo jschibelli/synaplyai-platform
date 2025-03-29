@@ -1,10 +1,10 @@
 import { MetricsCollector } from '../services/metrics/MetricsCollector';
 import { getTenantContext } from './tenant-context';
-<<<<<<< HEAD
-import { MetricsCollector } from './metrics/metrics-interface';
-=======
+
 import { EventEmitter } from 'events';
->>>>>>> debug
+=======
+import { MetricsCollector } from './metrics/metrics-interface';
+
 
 /**
  * Circuit breaker states
@@ -65,15 +65,9 @@ export class CircuitBreaker {
   serviceName: string;
 
   constructor(
-<<<<<<< HEAD
-    private serviceName: string,
-    options: Partial<CircuitBreakerOptions> = {},
-    private metricsCollector?: MetricsCollector
-=======
     serviceName: string, 
     options: CircuitBreakerOptions,
     private metrics: MetricsCollector
->>>>>>> debug
   ) {
     this.serviceName = serviceName;
     this.options = {
@@ -199,6 +193,7 @@ export class TenantAwareCircuitBreaker {
   private circuitKey: string;
 
   constructor(
+
     private store: CircuitBreakerStore,
     private tenantId: string,
     serviceName: string,
@@ -208,6 +203,10 @@ export class TenantAwareCircuitBreaker {
       successThreshold: 2,
       resetTimeoutMs: 30000
     }
+    private serviceName: string,
+    options: Partial<CircuitBreakerOptions> = {},
+    private metricsCollector?: MetricsCollector
+
   ) {
     this.serviceName = serviceName;
     this.circuitKey = `${tenantId}:${serviceName}`;

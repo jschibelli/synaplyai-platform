@@ -7,10 +7,9 @@ import { v4 as uuidv4 } from 'uuid';
 export interface TenantContext {
   tenantId: string;
   userId: string;
-<<<<<<< HEAD
-=======
+
   requestId?: string;
->>>>>>> debug
+
   traceId?: string;
   requestId: string;
   features?: Record<string, boolean>;
@@ -18,10 +17,7 @@ export interface TenantContext {
   [key: string]: any;
 }
 
-<<<<<<< HEAD
-// Create a singleton instance of AsyncLocalStorage for tenant context
-const tenantContextStorage = new AsyncLocalStorage<TenantContext>();
-=======
+
 // Create AsyncLocalStorage for tenant context
 export const tenantContextStorage = new AsyncLocalStorage<TenantContext>();
 
@@ -116,7 +112,10 @@ export function createTestTenantContext(overrides?: Partial<TenantContext>): Ten
     ...overrides
   };
 }
->>>>>>> debug
+
+// Create a singleton instance of AsyncLocalStorage for tenant context
+const tenantContextStorage = new AsyncLocalStorage<TenantContext>();
+
 
 /**
  * Create a new tenant context
@@ -125,12 +124,11 @@ export function createTenantContext(tenantId: string, userId: string, additional
   return {
     tenantId,
     userId,
-<<<<<<< HEAD
+
+    requestId: additionalContext.requestId || generateRequestId(), // Add a default requestId
+
     requestId: additionalContext.requestId || `req-${uuidv4()}`, // Ensure requestId exists
     traceId: additionalContext.traceId || `trace-${uuidv4()}`,
-=======
-    requestId: additionalContext.requestId || generateRequestId(), // Add a default requestId
->>>>>>> debug
     ...additionalContext
   };
 }
@@ -230,7 +228,8 @@ export function setDefaultTenantContext() {
 // For development purposes only - will be replaced with proper middleware
 if (process.env.NODE_ENV !== 'production') {
   setDefaultTenantContext();
-<<<<<<< HEAD
+
+}
 }
 
 /**
@@ -255,6 +254,4 @@ export function clearTenantContext(): void {
 export const getCurrentTenantContext = getTenantContext;
 export const setCurrentTenantContext = setTenantContext;
 export { tenantContextStorage };
-=======
-}
->>>>>>> debug
+
