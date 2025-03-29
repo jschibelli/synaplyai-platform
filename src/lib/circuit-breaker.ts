@@ -50,12 +50,12 @@ export interface CircuitBreakerStore {
  * Circuit breaker for protecting against cascading failures
  */
 export class CircuitBreaker {
-  private state: CircuitState = CircuitState.CLOSED;
-  private failureCount: number = 0;
-  private successCount: number = 0;
-  private lastStateChange: number = Date.now();
+  state: CircuitState = CircuitState.CLOSED;
+  failureCount: number = 0;
+  successCount: number = 0;
+  lastStateChange: number = Date.now();
   private readonly options: CircuitBreakerOptions;
-  readonly serviceName: string;
+  serviceName: string;
 
   constructor(
     serviceName: string, 
@@ -375,6 +375,10 @@ export function createCircuitBreakerFactory(
  */
 export interface CircuitBreakerInterface {
   serviceName: string;
+  state?: CircuitState;
+  failureCount?: number;
+  successCount?: number;
+  lastStateChange?: number;
   execute: <T>(fn: () => Promise<T>) => Promise<T>;
   executeWithBulkhead: <T>(fn: () => Promise<T>, concurrencyLimit?: number) => Promise<T>;
   getState(): Promise<CircuitState>;
@@ -382,5 +386,10 @@ export interface CircuitBreakerInterface {
   recordFailure(): Promise<void>;
   transitionState(newState: CircuitState): Promise<void>;
   transitionToState(newState: CircuitState): Promise<void>;
-  shouldAttemptReset(state?: any): boolean;
+  shouldAttemptReset(): boolean;
+  options?: {
+    failureThreshold: number;
+    successThreshold: number;
+    resetTimeoutMs: number;
+  };
 }

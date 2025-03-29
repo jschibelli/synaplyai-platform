@@ -1,24 +1,26 @@
-// WebSocket mock compatible with Next.js 15.2.4
-
+/**
+ * Mock WebSocket implementation for testing
+ */
 export class MockWebSocket implements WebSocket {
-  // Static constants
-  static readonly CONNECTING: 0 = 0;
-  static readonly OPEN: 1 = 1;
-  static readonly CLOSING: 2 = 2;
-  static readonly CLOSED: 3 = 3;
+  // Static constants matching the WebSocket specification
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1; 
+  static readonly CLOSING = 2;
+  static readonly CLOSED = 3;
   
-  // Instance properties
-  readonly CONNECTING: 0 = 0;
-  readonly OPEN: 1 = 1;
-  readonly CLOSING: 2 = 2;
-  readonly CLOSED: 3 = 3;
+  // Instance constants
+  readonly CONNECTING = 0;
+  readonly OPEN = 1;
+  readonly CLOSING = 2;
+  readonly CLOSED = 3;
   
-  url: string;
-  readyState: number = MockWebSocket.OPEN; // Start in OPEN state by default
-  binaryType: 'blob' | 'arraybuffer' = 'blob';
+  // Required WebSocket properties
+  url: string = '';
   protocol: string = '';
   extensions: string = '';
   bufferedAmount: number = 0;
+  binaryType: 'blob' | 'arraybuffer' = 'blob';
+  readyState: number = MockWebSocket.OPEN;
   
   // Event handlers
   onopen: ((this: WebSocket, ev: Event) => any) | null = null;
@@ -26,187 +28,119 @@ export class MockWebSocket implements WebSocket {
   onmessage: ((this: WebSocket, ev: MessageEvent) => any) | null = null;
   onerror: ((this: WebSocket, ev: Event) => any) | null = null;
   
-  // Storage for events
-  listeners: {[key: string]: Array<EventListenerOrEventListenerObject>} = {};
-  
-  // For test tracking
-  static sentMessages: any[] = [];
+  // Custom properties for testing
+  listeners: Record<string, Function[]> = {};
   messages: any[] = [];
-  
-  constructor(url: string | URL, protocols?: string | string[]) {
-    this.url = url.toString();
-    
-    // Simulate connection event on next tick
-    setTimeout(() => {
-      if (this.onopen) {
-        this.onopen(new Event('open') as any);
-      }
-      this.emit('open', new Event('open'));
-    }, 0);
+
+  constructor(url?: string | URL, protocols?: string | string[]) {
+    this.url = typeof url === 'string' ? url : url?.toString() || '';
+    this.protocol = typeof protocols === 'string' ? protocols : 
+      (Array.isArray(protocols) ? protocols[0] : '');
   }
-  
-  // WebSocket methods
-  send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
-    try {
-      let parsedData = data;
-      if (typeof data === 'string') {
-        try {
-          parsedData = JSON.parse(data);
-        } catch (e) {
-          // Keep as string if not JSON
-        }
-      }
-      
-      MockWebSocket.sentMessages.push(parsedData);
-      this.messages.push(parsedData);
-    } catch (e) {
-      console.error('Error in mock WebSocket send:', e);
+
+  // WebSocket required methods
+  close(code?: number, reason?: string): void {
+    this.readyState = MockWebSocket.CLOSED;
+    if (this.listeners['close']) {
+      this.listeners['close'].forEach(callback => callback({ code, reason }));
+    }
+    
+    if (this.onclose) {
+      const event = { code, reason } as CloseEvent;
+      this.onclose.call(this as unknown as WebSocket, event);
     }
   }
-  
-  close(code?: number, reason?: string): void {
-    this.readyState = MockWebSocket.CLOSING;
-    
-    setTimeout(() => {
-      this.readyState = MockWebSocket.CLOSED;
-      
-      if (this.onclose) {
-        this.onclose(new CloseEvent('close', { 
-          code: code || 1000, 
-          reason: reason || '',
-          wasClean: true
-        }) as any);
-      }
-      
-      this.emit('close', new CloseEvent('close', { 
-        code: code || 1000, 
-        reason: reason || '',
-        wasClean: true
-      }));
-    }, 0);
+
+  send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
+    this.messages.push({ type: 'send', data });
   }
-  
+
   // EventTarget methods
   addEventListener<K extends keyof WebSocketEventMap>(
     type: K, 
-    listener: (ev: WebSocketEventMap[K]) => any, 
+    listener: (this: WebSocket, ev: WebSocketEventMap[K]) => any,
     options?: boolean | AddEventListenerOptions
   ): void;
   addEventListener(
-    type: string,
+    type: string, 
     listener: EventListenerOrEventListenerObject,
     options?: boolean | AddEventListenerOptions
   ): void {
-    if (!this.listeners[type]) {
-      this.listeners[type] = [];
-    }
-    this.listeners[type].push(listener);
-    
-    // If already open and trying to listen for open event, trigger immediately
-    if (type === 'open' && this.readyState === MockWebSocket.OPEN) {
-      (listener as EventListener)(new Event('open'));
-    }
+    this.on(type, typeof listener === 'function' ? listener : listener.handleEvent);
   }
-  
+
   removeEventListener<K extends keyof WebSocketEventMap>(
-    type: K,
-    listener: (ev: WebSocketEventMap[K]) => any,
+    type: K, 
+    listener: (this: WebSocket, ev: WebSocketEventMap[K]) => any,
     options?: boolean | EventListenerOptions
   ): void;
   removeEventListener(
-    type: string,
+    type: string, 
     listener: EventListenerOrEventListenerObject,
     options?: boolean | EventListenerOptions
   ): void {
-    if (this.listeners[type]) {
-      this.listeners[type] = this.listeners[type].filter(l => l !== listener);
-    }
+    this.off(type);
   }
-  
+
   dispatchEvent(event: Event): boolean {
-    const type = event.type;
-    
-    if (this.listeners[type]) {
-      for (const listener of this.listeners[type]) {
-        if (typeof listener === 'function') {
-          listener(event);
-        } else {
-          listener.handleEvent(event);
-        }
-      }
+    const eventName = event.type;
+    if (this.listeners[eventName]) {
+      this.listeners[eventName].forEach(callback => callback(event));
+      return !event.defaultPrevented;
     }
-    
-    switch (type) {
-      case 'open':
-        if (this.onopen) this.onopen(event);
-        break;
-      case 'close':
-        if (this.onclose) this.onclose(event as CloseEvent);
-        break;
-      case 'message':
-        if (this.onmessage) this.onmessage(event as MessageEvent);
-        break;
-      case 'error':
-        if (this.onerror) this.onerror(event);
-        break;
-    }
-    
-    return !event.cancelable || !event.defaultPrevented;
+    return true;
   }
-  
-  // Helper methods for testing
+
+  // Testing utility methods
   on(event: string, callback: Function): void {
-    // Cast the event type to a valid WebSocketEventMap key or use a type assertion
-    const validEvent = event as keyof WebSocketEventMap;
-    this.addEventListener(validEvent, callback as EventListener);
+    if (!this.listeners[event]) {
+      this.listeners[event] = [];
+    }
+    this.listeners[event].push(callback);
   }
-  
+
   off(event: string): void {
-    this.listeners[event] = [];
+    delete this.listeners[event];
   }
-  
+
   emit(event: string, data: any): void {
-    if (event === 'message') {
-      const messageEvent = new MessageEvent('message', { data }) as any;
-      this.dispatchEvent(messageEvent);
-    } else {
-      this.dispatchEvent(data);
+    if (this.listeners[event]) {
+      this.listeners[event].forEach(callback => callback(data));
     }
+    this.messages.push({ event, data });
   }
-  
+
   triggerMessage(message: string): void {
-    const event = new MessageEvent('message', { data: message }) as any;
-    if (this.onmessage) {
-      this.onmessage(event);
+    if (this.listeners['message']) {
+      this.listeners['message'].forEach(callback => callback({ data: message }));
     }
-    this.dispatchEvent(event);
+    
+    if (this.onmessage) {
+      const event = { data: message } as MessageEvent;
+      this.onmessage.call(this as unknown as WebSocket, event);
+    }
   }
-  
-  // Reset for test isolation
+
   reset(): void {
-    this.messages = [];
-    MockWebSocket.sentMessages = [];
     this.listeners = {};
+    this.messages = [];
+    this.readyState = MockWebSocket.OPEN;
   }
-  
-  // Used in tests to simulate reconnection
+
   simulateReconnection(): void {
     this.readyState = MockWebSocket.OPEN;
-    this.emit('open', new Event('open'));
+    if (this.listeners['reconnect']) {
+      this.listeners['reconnect'].forEach(callback => callback());
+    }
+    
+    if (this.onopen) {
+      const event = {} as Event;
+      this.onopen.call(this as unknown as WebSocket, event);
+    }
   }
 }
 
-// Also export a factory function for TypeScript support
-export function createMockWebSocket(url: string | URL): MockWebSocket {
-  return new MockWebSocket(url);
-}
-
-// Make it globally available
-if (typeof global !== 'undefined') {
-  (global as any).WebSocket = MockWebSocket;
-}
-
-// Export for React context testing
-export function MockWebSocketProvider({ children }: { children: React.ReactNode }) {
-  return children;
+// Factory function
+export function createMockWebSocket(): MockWebSocket {
+  return new MockWebSocket();
 }

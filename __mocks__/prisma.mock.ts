@@ -1,7 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import { mockDeep, mockReset, DeepMockProxy } from 'jest-mock-extended';
 
-// Create proper mock functions with mockResolvedValue support
+// Create a properly structured Prisma mock
+
+// Create a mock function with promise support
 const createMockFunction = () => {
   const fn = jest.fn();
   fn.mockResolvedValue = (value) => {
@@ -12,53 +14,43 @@ const createMockFunction = () => {
     fn.mockImplementation(() => Promise.reject(error));
     return fn;
   };
-  fn.mockResolvedValueOnce = (value) => {
-    fn.mockImplementationOnce(() => Promise.resolve(value));
-    return fn;
-  };
-  fn.mockRejectedValueOnce = (error) => {
-    fn.mockImplementationOnce(() => Promise.reject(error));
-    return fn;
-  };
   return fn;
 };
 
-// Create mock models
-const createMockModel = () => ({
-  findFirst: createMockFunction(),
+// Create a complete model mock with all common methods
+const createModelMock = () => ({
   findMany: createMockFunction(),
+  findFirst: createMockFunction(),
   findUnique: createMockFunction(),
   create: createMockFunction(),
+  createMany: createMockFunction(),
   update: createMockFunction(),
+  updateMany: createMockFunction(),
+  upsert: createMockFunction(),
   delete: createMockFunction(),
   deleteMany: createMockFunction(),
-  count: createMockFunction(),
-  updateMany: createMockFunction(),
-  upsert: createMockFunction()
+  count: createMockFunction()
 });
 
-// Create the prisma mock with ALL required models
+// Create the prisma mock
 const prisma = {
-  // Required models from test errors
-  event: createMockModel(),
-  snapshot: createMockModel(),
-  document: createMockModel(),
-  user: createMockModel(),
-  complianceLog: createMockModel(),
-  complianceAudit: createMockModel(),
+  // Add all models needed for tests
+  user: createModelMock(),
+  document: createModelMock(),
+  subscription: createModelMock(),
+  event: createModelMock(),
+  snapshot: createModelMock(),
+  complianceLog: createModelMock(),
+  complianceAudit: createModelMock(),
   
-  // Transaction method
-  $transaction: jest.fn().mockImplementation(async (callback) => {
-    if (typeof callback === 'function') {
-      return callback(prisma);
+  // Add Prisma client methods
+  $transaction: jest.fn().mockImplementation(async (fn) => {
+    if (typeof fn === 'function') {
+      return await fn(prisma);
     }
-    return Promise.all(callback);
+    return Promise.all(fn);
   }),
-  
-  // For middleware
-  $use: jest.fn().mockImplementation(middleware => prisma),
-  
-  // Connection methods
+  $use: jest.fn(),
   $connect: jest.fn().mockResolvedValue(undefined),
   $disconnect: jest.fn().mockResolvedValue(undefined)
 };

@@ -1,4 +1,5 @@
 import { CircuitState } from '../lib/circuit-breaker';
+import { AICommandContext, AICommandContextParameters } from '../ai/AICommandContext';
 
 // Remove the duplicated AICommandContextParameters and keep this one
 export interface AICommandContextParameters {
@@ -102,12 +103,13 @@ export interface AICommand {
   documentId: string;
   userId: string;
   requiresAIAnalysis: boolean; // Make this required since tests expect it
-  contextParameters: AICommandContextParameters;
+  contextParameters?: AICommandContextParameters;
   analysisParameters?: {
     type: string;
     model?: string;
     temperature?: number;
     maxTokens?: number;
+    retryAttempts?: number;
     [key: string]: any;
   };
   [key: string]: any; // Allow additional properties
@@ -190,6 +192,9 @@ export interface AICommandContext {
  * Document context for editor
  */
 export interface DocumentContext {
+  documentId?: string;
+  userId?: string;
+  tenantId?: string;
   precedingText?: string;
   followingText?: string;
   selectedText?: string;
@@ -199,6 +204,35 @@ export interface DocumentContext {
     userId: string;
   };
   aiAnalysisResult?: AIAnalysisResult;
+  onProgress?: (update: string) => void;
+  onToken?: (token: string) => void;
+  document?: {
+    content: string;
+    metadata?: any;
+  };
+  selection?: {
+    start: number;
+    end: number;
+    text: string;
+  };
+}
+
+// Convert DocumentContext to AICommandContext
+export function toAICommandContext(docContext: DocumentContext): AICommandContext {
+  return {
+    documentId: docContext.documentId || 'doc-1',
+    userId: docContext.userId || docContext.tenantContext?.userId || 'user-1',
+    tenantId: docContext.tenantId || docContext.tenantContext?.tenantId || 'tenant-1',
+    precedingText: docContext.precedingText,
+    followingText: docContext.followingText,
+    selectedText: docContext.selectedText,
+    documentMetadata: docContext.documentMetadata,
+    aiAnalysisResult: docContext.aiAnalysisResult,
+    onProgress: docContext.onProgress,
+    onToken: docContext.onToken,
+    document: docContext.document,
+    selection: docContext.selection
+  };
 }
 
 // Mock interfaces for testing

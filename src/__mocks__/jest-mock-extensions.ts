@@ -29,38 +29,18 @@ export type TypedMock<T extends (...args: any[]) => any> = jest.Mock<ReturnType<
 };
 
 /**
- * Creates a properly typed Jest mock function with all chaining methods
- * 
- * @param implementation Optional implementation function
- * @returns A Jest mock with proper TypeScript typings for all methods
+ * Creates a typed jest mock with proper typing
  */
-export function createTypedMock<T extends (...args: any[]) => any>(
-  implementation?: T
-): TypedMock<T> {
-  const mock = jest.fn(implementation) as TypedMock<T>;
+export function createTypedMock<T = any>(): jest.Mock<T> {
+  const mock = jest.fn() as jest.Mock<T>;
   
-  // Set up chainable mock methods
-  mock.mockImplementation = jest.fn().mockReturnValue(mock) as any;
-  mock.mockImplementationOnce = jest.fn().mockReturnValue(mock) as any;
-  mock.mockResolvedValue = jest.fn().mockReturnValue(mock) as any;
-  mock.mockResolvedValueOnce = jest.fn().mockReturnValue(mock) as any;
-  mock.mockRejectedValue = jest.fn().mockReturnValue(mock) as any;
-  mock.mockRejectedValueOnce = jest.fn().mockReturnValue(mock) as any;
-  mock.mockReturnValue = jest.fn().mockReturnValue(mock) as any;
-  mock.mockReturnValueOnce = jest.fn().mockReturnValue(mock) as any;
-  mock.mockReset = jest.fn().mockReturnValue(mock) as any;
-  mock.mockClear = jest.fn().mockReturnValue(mock) as any;
-  mock.mockRestore = jest.fn().mockReturnValue(mock) as any;
-  
-  // Set up mock object with the missing invocationCallOrder property
-  mock.mock = {
-    calls: [],
-    results: [],
-    instances: [],
-    contexts: [],
-    lastCall: undefined,
-    invocationCallOrder: [] // Add this missing property
-  };
+  // Properly type common mock methods
+  mock.mockImplementation = jest.fn().mockImplementation;
+  mock.mockImplementationOnce = jest.fn().mockImplementationOnce;
+  mock.mockResolvedValue = jest.fn().mockResolvedValue;
+  mock.mockResolvedValueOnce = jest.fn().mockResolvedValueOnce;
+  mock.mockRejectedValue = jest.fn().mockRejectedValue;
+  mock.mockRejectedValueOnce = jest.fn().mockRejectedValueOnce;
   
   return mock;
 }

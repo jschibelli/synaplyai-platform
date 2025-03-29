@@ -43,3 +43,23 @@ function convertToDocumentEvent(event: any): DocumentEvent {
     tenantId: event.tenantId || 'test-tenant'
   } as DocumentEvent;
 }
+
+// Create this file to fix missing import error
+
+export function createTestConflict(props = {}) {
+  return {
+    id: props.id || 'conflict-1',
+    documentId: props.documentId || 'doc-1',
+    type: props.type || 'TEXT_EDIT',
+    local: props.local || {},
+    remote: props.remote || {},
+    localContent: props.localContent || 'Local content',
+    remoteContent: props.remoteContent || 'Remote content',
+    userId: props.userId || 'test-user',
+    createdAt: props.createdAt || new Date(),
+    resolvedAt: props.resolvedAt,
+    resolution: props.resolution
+  };
+}
+
+// Add other test helpers as needed

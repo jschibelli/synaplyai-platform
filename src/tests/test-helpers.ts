@@ -27,21 +27,14 @@ export function createCompleteAnalysisResult(
 }
 
 /**
- * Creates standard context parameters with all required fields
+ * Creates standard context parameters for testing
  */
-export function createStandardContextParameters(
-  overrides: Partial<AICommandContextParameters> = {}
-): AICommandContextParameters {
+export function createStandardContextParameters(): AICommandContextParameters {
   return {
     windowSize: 1000,
     includePreceding: true,
     includeFollowing: true,
-    includeDocument: true,
-    // Add commonly needed optional parameters
-    includeMetadata: false,
-    detectIntent: false,
-    fallbackToPartialContext: false,
-    ...overrides
+    includeDocument: true
   };
 }
 
@@ -69,7 +62,7 @@ export function createCompleteTextCommand(
       temperature: 0.7,
       maxTokens: 100
     },
-    requiresAIAnalysis: true,
+    requiresAIAnalysis: props.requiresAIAnalysis ?? true,
     ...props
   };
 }
@@ -100,24 +93,29 @@ export function createRewriteTextCommand(
 }
 
 /**
- * Creates a grammar check command with all required properties
+ * Creates a grammar check command for testing
  */
-export function createGrammarCheckCommand(
-  overrides: Partial<GrammarCheckCommand> = {}
-): GrammarCheckCommand {
+export function createGrammarCheckCommand(props: Partial<GrammarCheckCommand> = {}): GrammarCheckCommand {
   return {
     type: 'GRAMMAR_CHECK',
-    documentId: 'doc-123',
-    userId: 'user-1',
-    selectionStart: 10,
-    selectionEnd: 100,
-    contextParameters: createStandardContextParameters(),
-    requiresAIAnalysis: true,
-    analysisParameters: {
-      type: 'CHECK_GRAMMAR',
-      model: 'gpt-4'
+    documentId: props.documentId || 'doc-1',
+    userId: props.userId || 'user-1',
+    selectionStart: props.selectionStart ?? 0,
+    selectionEnd: props.selectionEnd ?? 100,
+    contextParameters: {
+      windowSize: props.contextParameters?.windowSize || 500,
+      includePreceding: props.contextParameters?.includePreceding ?? true,
+      includeFollowing: props.contextParameters?.includeFollowing ?? true,
+      includeDocument: props.contextParameters?.includeDocument ?? true
     },
-    ...overrides
+    analysisParameters: props.analysisParameters || {
+      type: 'GRAMMAR_CHECK',
+      model: 'gpt-4',
+      temperature: 0.3,
+      maxTokens: 50
+    },
+    requiresAIAnalysis: props.requiresAIAnalysis ?? true,
+    ...props
   };
 }
 
