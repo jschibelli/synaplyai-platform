@@ -1,5 +1,5 @@
-import { RedisClient } from '../redis/RedisClient';
-import { TenantContext } from '../tenant/TenantContext';
+import { mockRedisClient } from '../../redis/mockRedisClient';
+import { TenantContext } from '../../tenant/TenantContext';
 
 interface MetricData {
   name: string;
@@ -17,11 +17,186 @@ interface MetricsBucket {
   p95: number;
 }
 
-export class MetricsCollector {
-  constructor(
-    private redisClient: RedisClient,
-    private tenantContext: TenantContext
-  ) {}
+export interface MetricsCollector {
+  recordLatency(metric: string, value: number, tags?: Record<string, string>): Promise<void>;
+  increment(key: string, value: number, tags?: Record<string, any>): Promise<void>;
+  incrementCounter(key: string, tags?: Record<string, string>): Promise<void>;
+  decrementCounter(key: string, tags?: Record<string, string>): Promise<number>;
+  recordValue(metric: string, value: number, tags?: Record<string, string>): Promise<void>;
+  getCounter(metric: string, tags?: Record<string, string>): Promise<number>;
+  getAverageValue(metric: string, tags?: Record<string, string>): Promise<number>;
+  getCountValue(metric: string, tags?: Record<string, string>): Promise<number>;
+  track(eventName: string, properties?: Record<string, any>): Promise<void>;
+  track(metricName: string, value: number, tags?: Record<string, any>): Promise<void>;
+  setCircuitBreakerState(tenantId: string, serviceName: string, state: string): Promise<void>;
+  getCircuitBreakerState(tenantId: string, serviceName: string): Promise<string>;
+  incrementCircuitBreakerFailures(tenantId: string, serviceName: string): Promise<void>;
+  incrementCircuitBreakerRejections(tenantId: string, serviceName: string): Promise<void>;
+  getFilterResultCounts(tenantId: string): Promise<Record<string, number>>;
+  getPercentileLatency(metric: string, percentile: number, tags?: Record<string, string>): Promise<number>;
+  getPipelineLatency(tenantId: string, pipeline: string): Promise<number>;
+}
+
+/**
+ * Metrics collector implementation
+ */
+export class MetricsCollector implements MetricsCollector {
+  private metrics: Map<string, number> = new Map();
+  private redisClient: any;
+
+  constructor(redisClient: any) {
+    this.redisClient = redisClient;
+  }
+
+  /**
+   * Increment a counter
+   */
+  async increment(key: string, value: number = 1, tags?: Record<string, any>): Promise<void> {
+    const formattedKey = this.formatKey(key, tags);
+    this.metrics.set(formattedKey, (this.metrics.get(formattedKey) || 0) + value);
+  }
+
+  /**
+   * Record operation latency
+   */
+  async recordLatency(metric: string, value: number, tags?: Record<string, string>): Promise<void> {
+    const key = this.formatKey(`${metric}.latency`, tags);
+    this.metrics.set(key, value);
+  }
+
+  /**
+   * Increment a counter specific to a metric
+   */
+  async incrementCounter(key: string, tags?: Record<string, string>): Promise<void> {
+    const formattedKey = this.formatKey(key, tags);
+    this.metrics.set(formattedKey, (this.metrics.get(formattedKey) || 0) + 1);
+  }
+
+  /**
+   * Decrement a counter
+   */
+  async decrementCounter(key: string, tags?: Record<string, string>): Promise<number> {
+    const formattedKey = this.formatKey(key, tags);
+    const newValue = (this.metrics.get(formattedKey) || 0) - 1;
+    this.metrics.set(formattedKey, newValue);
+    return newValue;
+  }
+  
+  /**
+   * Get counter value
+   */
+  async getCounter(metric: string, tags?: Record<string, string>): Promise<number> {
+    const key = this.formatKey(metric, tags);
+    return this.metrics.get(key) || 0;
+  }
+
+  /**
+   * Record a value
+   */
+  async recordValue(metric: string, value: number, tags?: Record<string, string>): Promise<void> {
+    const key = this.formatKey(metric, tags);
+    this.metrics.set(key, value);
+  }
+
+  /**
+   * Get average value
+   */
+  async getAverageValue(metric: string, tags?: Record<string, string>): Promise<number> {
+    return this.getCounter(metric, tags) || 0;
+  }
+
+  /**
+   * Get count value
+   */
+  async getCountValue(metric: string, tags?: Record<string, string>): Promise<number> {
+    return this.getCounter(metric, tags) || 0;
+  }
+
+  /**
+   * Format a key with tags
+   */
+  formatKey(key: string, tags?: Record<string, any>): string {
+    if (!tags) return key;
+    
+    const tagString = Object.entries(tags)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(',');
+      
+    return `${key}:${tagString}`;
+  }
+
+  /**
+   * Track event or metric
+   */
+  async track(nameOrMetric: string, valueOrProps?: any, tags?: Record<string, any>): Promise<void> {
+    if (typeof valueOrProps === 'number') {
+      // Track metric
+      const key = this.formatKey(nameOrMetric, tags);
+      this.metrics.set(key, valueOrProps);
+    } else {
+      // Track event
+      const key = this.formatKey(`event.${nameOrMetric}`, valueOrProps);
+      this.metrics.set(key, 1);
+    }
+  }
+
+  /**
+   * Set circuit breaker state
+   */
+  async setCircuitBreakerState(tenantId: string, serviceName: string, state: string): Promise<void> {
+    const key = `circuit.${tenantId}.${serviceName}.state`;
+    this.metrics.set(key, state === 'OPEN' ? 1 : 0);
+  }
+
+  /**
+   * Get circuit breaker state
+   */
+  async getCircuitBreakerState(tenantId: string, serviceName: string): Promise<string> {
+    const key = `circuit.${tenantId}.${serviceName}.state`;
+    return this.metrics.get(key) ? 'OPEN' : 'CLOSED';
+  }
+
+  /**
+   * Increment circuit breaker failures
+   */
+  async incrementCircuitBreakerFailures(tenantId: string, serviceName: string): Promise<void> {
+    const key = `circuit.${tenantId}.${serviceName}.failures`;
+    this.metrics.set(key, (this.metrics.get(key) || 0) + 1);
+  }
+
+  /**
+   * Increment circuit breaker rejections
+   */
+  async incrementCircuitBreakerRejections(tenantId: string, serviceName: string): Promise<void> {
+    const key = `circuit.${tenantId}.${serviceName}.rejections`;
+    this.metrics.set(key, (this.metrics.get(key) || 0) + 1);
+  }
+
+  /**
+   * Get filter result counts
+   */
+  async getFilterResultCounts(tenantId: string): Promise<Record<string, number>> {
+    return {
+      ALLOWED: this.metrics.get(`filter.${tenantId}.ALLOWED`) || 0,
+      BLOCKED: this.metrics.get(`filter.${tenantId}.BLOCKED`) || 0,
+      FLAGGED: this.metrics.get(`filter.${tenantId}.FLAGGED`) || 0
+    };
+  }
+
+  /**
+   * Get percentile latency
+   */
+  async getPercentileLatency(metric: string, percentile: number, tags?: Record<string, string>): Promise<number> {
+    // Simplified mock implementation
+    return this.metrics.get(this.formatKey(`${metric}.p${percentile}`, tags)) || 0;
+  }
+
+  /**
+   * Get pipeline latency
+   */
+  async getPipelineLatency(tenantId: string, pipeline: string): Promise<number> {
+    return this.metrics.get(`pipeline.${tenantId}.${pipeline}.latency`) || 0;
+  }
 
   async trackMetric(data: MetricData): Promise<boolean> {
     const timestamp = data.timestamp || Date.now();

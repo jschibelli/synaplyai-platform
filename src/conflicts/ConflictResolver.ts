@@ -1,11 +1,20 @@
 import { OperationalTransform, Operation } from '../collaborative/OperationalTransform';
 import { VectorClock } from '../collaborative/VectorClock';
+import { MetricsCollector } from '../services/metrics/MetricsCollector';
+import { EventStore } from '../collaboration/events/EventStore';
 
 export enum ConflictResolutionStrategy {
   MERGE = 'MERGE',
   LOCAL_FIRST = 'LOCAL_FIRST',
   REMOTE_FIRST = 'REMOTE_FIRST',
   MANUAL = 'MANUAL'
+}
+
+export enum ConflictType {
+  TEXT_EDIT = 'TEXT_EDIT',
+  FORMAT = 'FORMAT',
+  DELETE_MODIFIED = 'DELETE_MODIFIED',
+  STRUCTURAL = 'STRUCTURAL'
 }
 
 export interface Conflict {
@@ -34,36 +43,224 @@ export interface ConflictResolution {
   resolvedContent: string;
   appliedOperations: Operation[];
   mergedState?: Record<string, any>;
+  resolvedEvents?: any[];
+  resolvedBy?: string;
+}
+
+export interface ConflictResolutionResult {
+  success: boolean;
+  resolvedEvents?: any[];
+  error?: Error;
 }
 
 export class ConflictResolver {
+  constructor(
+    private eventStore?: EventStore,
+    private metricsCollector?: MetricsCollector,
+    private nodeId: string = 'default-node'
+  ) {}
+
   /**
    * Resolves a conflict using the specified strategy
    */
   async resolveConflict(
     conflict: Conflict,
     strategy: ConflictResolutionStrategy,
-    manualMerge?: string
-  ): Promise<ConflictResolution> {
-    switch (strategy) {
-      case ConflictResolutionStrategy.MERGE:
-        return this.mergeChanges(conflict);
-      
-      case ConflictResolutionStrategy.LOCAL_FIRST:
-        return this.prioritizeLocal(conflict);
-        
-      case ConflictResolutionStrategy.REMOTE_FIRST:
-        return this.prioritizeRemote(conflict);
-        
-      case ConflictResolutionStrategy.MANUAL:
-        if (!manualMerge) {
-          throw new Error('Manual merge requires merged content');
-        }
-        return this.applyManualMerge(conflict, manualMerge);
-        
-      default:
-        throw new Error(`Unsupported resolution strategy: ${strategy}`);
+    options?: {
+      manualMerge?: string;
+      userId?: string;
     }
+  ): Promise<ConflictResolution> {
+    const startTime = performance.now();
+    
+    try {
+      // First check if we have token-level data and the strategy is MERGE
+      if (conflict.tokens && strategy === ConflictResolutionStrategy.MERGE) {
+        return this.resolveTokenConflicts(conflict);
+      }
+      
+      let resolution: ConflictResolution;
+      
+      switch (strategy) {
+        case ConflictResolutionStrategy.MERGE:
+          resolution = await this.mergeChanges(conflict);
+          break;
+        
+        case ConflictResolutionStrategy.LOCAL_FIRST:
+          resolution = await this.prioritizeLocal(conflict);
+          break;
+          
+        case ConflictResolutionStrategy.REMOTE_FIRST:
+          resolution = await this.prioritizeRemote(conflict);
+          break;
+          
+        case ConflictResolutionStrategy.MANUAL:
+          if (!options?.manualMerge) {
+            throw new Error('Manual merge requires merged content');
+          }
+          resolution = await this.applyManualMerge(conflict, options.manualMerge);
+          break;
+          
+        default:
+          throw new Error(`Unsupported resolution strategy: ${strategy}`);
+      }
+      
+      // Add resolvedBy if userId is provided
+      if (options?.userId) {
+        resolution.resolvedBy = options.userId;
+      }
+      
+      // Track metrics if collector is available
+      if (this.metricsCollector) {
+        const duration = performance.now() - startTime;
+        await this.metricsCollector.recordValue('conflict.resolution.duration', duration, {
+          strategy,
+          conflictType: conflict.type,
+          hasTokens: conflict.tokens ? 'true' : 'false'
+        });
+        
+        await this.metricsCollector.track('conflict.resolution.complete', {
+          strategy,
+          conflictType: conflict.type,
+          resolvedBy: options?.userId || 'system'
+        });
+      }
+      
+      return resolution;
+    } catch (error) {
+      // Track error metrics if collector is available
+      if (this.metricsCollector) {
+        await this.metricsCollector.track('conflict.resolution.error', {
+          strategy,
+          conflictType: conflict.type,
+          error: error.message
+        });
+      }
+      
+      throw error;
+    }
+  }
+  
+  /**
+   * Apply a resolution to create events and update the document
+   */
+  async applyResolution(documentId: string, resolution: ConflictResolution): Promise<ConflictResolutionResult> {
+    try {
+      // If we don't have an event store, we can't create events
+      if (!this.eventStore || !resolution.resolvedEvents) {
+        return {
+          success: true,
+          resolvedEvents: []
+        };
+      }
+      
+      // Create events for each resolved event
+      const events = [];
+      for (const event of resolution.resolvedEvents) {
+        const result = await this.eventStore.appendEvent(event);
+        events.push(result);
+      }
+      
+      // Track metrics
+      if (this.metricsCollector) {
+        await this.metricsCollector.incrementCounter('conflict.resolution.applied', {
+          documentId,
+          strategy: resolution.strategy
+        });
+      }
+      
+      return {
+        success: true,
+        resolvedEvents: events
+      };
+    } catch (error) {
+      // Track error metrics
+      if (this.metricsCollector) {
+        await this.metricsCollector.track('conflict.resolution.apply.error', {
+          documentId,
+          error: error.message
+        });
+      }
+      
+      return {
+        success: false,
+        error
+      };
+    }
+  }
+  
+  /**
+   * Get remote events to help with resolving conflicts
+   */
+  async getRemoteEvents(documentId: string, since: number): Promise<any[]> {
+    if (!this.eventStore) {
+      return [];
+    }
+    
+    try {
+      const events = await this.eventStore.getEvents(documentId, since);
+      if (this.metricsCollector) {
+        await this.metricsCollector.recordValue('conflict.remote_events.count', events.length, {
+          documentId
+        });
+      }
+      return events;
+    } catch (error) {
+      if (this.metricsCollector) {
+        await this.metricsCollector.track('conflict.remote_events.error', {
+          documentId,
+          error: error.message
+        });
+      }
+      return [];
+    }
+  }
+  
+  /**
+   * Resolves conflicts at the token level
+   */
+  private async resolveTokenConflicts(conflict: Conflict): Promise<ConflictResolution> {
+    if (!conflict.tokens) {
+      // Fallback to traditional merge if token data isn't available
+      return this.mergeChanges(conflict);
+    }
+    
+    // Process token states to build resolved content
+    let resolvedContent = '';
+    const acceptedTokens: string[] = [];
+    const rejectedTokens: string[] = [];
+    
+    for (const token of conflict.tokens) {
+      if (token.state === 'ACCEPTED') {
+        resolvedContent += token.text;
+        acceptedTokens.push(token.id);
+      } else if (token.state === 'CONFLICTED') {
+        // For conflicted tokens, prioritize local content
+        const localMatch = conflict.localContent.includes(token.text);
+        if (localMatch) {
+          resolvedContent += token.text;
+        }
+      } else if (token.state === 'REJECTED') {
+        rejectedTokens.push(token.id);
+        // Don't add rejected tokens to resolved content
+      }
+    }
+    
+    return {
+      conflictId: conflict.id,
+      strategy: ConflictResolutionStrategy.MERGE,
+      resolvedContent,
+      appliedOperations: [],
+      mergedState: {
+        acceptedTokens,
+        rejectedTokens,
+        tokenStats: {
+          accepted: acceptedTokens.length,
+          rejected: rejectedTokens.length,
+          conflicted: conflict.tokens.filter(t => t.state === 'CONFLICTED').length
+        }
+      }
+    };
   }
   
   /**

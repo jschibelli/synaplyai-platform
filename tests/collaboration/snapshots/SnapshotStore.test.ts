@@ -33,10 +33,21 @@ describe('SnapshotStore', () => {
       }
     } as unknown as jest.Mocked<PrismaClient>;
     
+    // Add mockResolvedValue methods to the functions
+    prisma.snapshot.create.mockResolvedValue({} as any);
+    prisma.snapshot.findFirst.mockResolvedValue(null);
+    prisma.snapshot.findMany.mockResolvedValue([]);
+    prisma.snapshot.deleteMany.mockResolvedValue({ count: 0 });
+    prisma.event.count.mockResolvedValue(0);
+    
     metricsCollector = {
       recordLatency: jest.fn().mockResolvedValue(undefined),
       track: jest.fn().mockResolvedValue(undefined),
-      increment: jest.fn().mockResolvedValue(undefined)
+      increment: jest.fn().mockResolvedValue(undefined),
+      incrementCounter: jest.fn().mockResolvedValue(undefined),
+      decrementCounter: jest.fn().mockResolvedValue(undefined),
+      getCounter: jest.fn().mockResolvedValue(0),
+      formatKey: jest.fn().mockReturnValue('test-key')
     } as unknown as jest.Mocked<MetricsCollector>;
     
     // Create SnapshotStore instance
@@ -61,7 +72,10 @@ describe('SnapshotStore', () => {
       prisma.snapshot.create.mockResolvedValue(mockSnapshot);
       
       // Create snapshot
-      const result = await snapshotStore.createSnapshot('doc-1', documentState, 10);
+      const result = await snapshotStore.createSnapshot('doc-1', documentState, 10, { 
+        createdBy: 'test-user',
+        compressionLevel: 'high'
+      });
       
       // Verify snapshot data was correctly passed
       expect(prisma.snapshot.create).toHaveBeenCalledWith({
@@ -142,13 +156,20 @@ describe('SnapshotStore', () => {
         tenantId: 'test-tenant',
         state: { content: 'test content' },
         version: 10,
-        timestamp: Date.now()
+        timestamp: new Date().toISOString(),
+        data: {},
+        metadata: {
+          version: 10,
+          documentId: 'doc-1',
+          timestamp: new Date().toISOString(),
+          eventCount: 50
+        }
       };
       
       prisma.snapshot.findFirst.mockResolvedValue(mockSnapshot);
       
       // Get latest snapshot
-      const result = await snapshotStore.getLatestSnapshot('doc-1');
+      const result = await snapshotStore.getLatestSnapshot('doc-1', 'tenant-1');
       
       // Verify correct query parameters
       expect(prisma.snapshot.findFirst).toHaveBeenCalledWith({
@@ -178,7 +199,7 @@ describe('SnapshotStore', () => {
     test('should return null when no snapshot exists', async () => {
       prisma.snapshot.findFirst.mockResolvedValue(null);
       
-      const result = await snapshotStore.getLatestSnapshot('doc-1');
+      const result = await snapshotStore.getLatestSnapshot('doc-1', 'tenant-1');
       
       expect(result).toBeNull();
       expect(metricsCollector.track).toHaveBeenCalledWith(
@@ -199,18 +220,20 @@ describe('SnapshotStore', () => {
         tenantId: 'test-tenant',
         state: { content: 'test content' },
         version: 10,
-        timestamp: Date.now()
+        timestamp: new Date().toISOString(),
+        data: {},
+        metadata: {}
       };
       
       prisma.snapshot.findFirst.mockResolvedValue(mockSnapshot);
       
       // First call should query database
-      const result1 = await snapshotStore.getLatestSnapshot('doc-1');
+      const result1 = await snapshotStore.getLatestSnapshot('doc-1', 'tenant-1');
       expect(result1).toEqual(mockSnapshot);
       expect(prisma.snapshot.findFirst).toHaveBeenCalledTimes(1);
       
       // Second call should use cache
-      const result2 = await snapshotStore.getLatestSnapshot('doc-1');
+      const result2 = await snapshotStore.getLatestSnapshot('doc-1', 'tenant-1');
       expect(result2).toEqual(mockSnapshot);
       
       // Database should not be queried again
@@ -226,19 +249,21 @@ describe('SnapshotStore', () => {
         tenantId: 'test-tenant',
         state: { content: 'test content' },
         version: 10,
-        timestamp: Date.now()
+        timestamp: new Date().toISOString(),
+        data: {},
+        metadata: {}
       };
       
       prisma.snapshot.findFirst.mockResolvedValue(mockSnapshot);
       
       // First call to populate cache
-      await snapshotStore.getLatestSnapshot('doc-1');
+      await snapshotStore.getLatestSnapshot('doc-1', 'tenant-1');
       
       // Clear cache
       snapshotStore.clearCache('doc-1');
       
       // Next call should query database again
-      await snapshotStore.getLatestSnapshot('doc-1');
+      await snapshotStore.getLatestSnapshot('doc-1', 'tenant-1');
       expect(prisma.snapshot.findFirst).toHaveBeenCalledTimes(2);
     });
   });
@@ -252,13 +277,20 @@ describe('SnapshotStore', () => {
         tenantId: 'test-tenant',
         state: { content: 'test content' },
         version: 8,
-        timestamp: Date.now()
+        timestamp: new Date().toISOString(),
+        data: {},
+        metadata: {
+          version: 8,
+          documentId: 'doc-1',
+          timestamp: new Date().toISOString(),
+          eventCount: 20
+        }
       };
       
       prisma.snapshot.findFirst.mockResolvedValue(mockSnapshot);
       
       // Get snapshot at version 10
-      const result = await snapshotStore.getSnapshotAtVersion('doc-1', 10);
+      const result = await snapshotStore.getSnapshotByVersion('doc-1', '10', 'test-tenant');
       
       // Verify query parameters
       expect(prisma.snapshot.findFirst).toHaveBeenCalledWith({
@@ -433,3 +465,23 @@ describe('SnapshotStore', () => {
     });
   });
 });
+
+// Update the mock snapshot with proper metadata
+const mockSnapshot = {
+  id: 'snap-1',
+  documentId: 'doc-1',
+  tenantId: 'test-tenant',
+  state: { content: 'test content' },
+  version: 8,
+  timestamp: new Date().toISOString(),
+  data: {},
+  metadata: {
+    version: 8,
+    documentId: 'doc-1',
+    timestamp: new Date().toISOString(),
+    eventCount: 20
+  }
+};
+
+// And update the method call to use string version parameter
+const result = await snapshotStore.getSnapshotByVersion('doc-1', '10', 'test-tenant');

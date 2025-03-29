@@ -1,15 +1,27 @@
 import { TenantAwareCircuitBreaker } from '../../src/circuit-breaker/tenant-breaker';
 import { RedisCircuitBreakerStore } from '../../src/circuit-breaker/redis-store';
-import { CircuitState } from '../../src/circuit-breaker/interfaces';
-import { MetricsCollector } from '../../src/services/metrics/MetricsCollector';
+import { CircuitState, CircuitBreakerInterface } from '../../src/lib/circuit-breaker';
+import { createMetricsCollectorMock } from '../../src/__mocks__/metrics-collector.mock';
 
 describe('Circuit Breaker Pattern', () => {
   let circuitBreaker: TenantAwareCircuitBreaker;
   let mockStore: jest.Mocked<RedisCircuitBreakerStore>;
-  let mockMetrics: jest.Mocked<MetricsCollector>;
+  let mockMetrics = createMetricsCollectorMock();
   
   const TEST_TENANT = 'test-tenant-1';
   const TEST_SERVICE = 'ai-completion-service';
+
+  // Update test mocks to use the interface
+  const mockCircuitBreaker: CircuitBreakerInterface = {
+    state: CircuitState.CLOSED,
+    failureCount: 0,
+    successCount: 0,
+    lastStateChange: Date.now(),
+    execute: jest.fn().mockImplementation(fn => fn()),
+    executeWithBulkhead: jest.fn().mockImplementation((fn, limit) => fn()),
+    serviceName: 'test-service',
+    transitionToState: jest.fn().mockResolvedValue(undefined)
+  };
 
   beforeEach(() => {
     mockStore = {
@@ -20,25 +32,63 @@ describe('Circuit Breaker Pattern', () => {
       resetCounters: jest.fn().mockResolvedValue(undefined),
       getLastStateChange: jest.fn().mockResolvedValue(new Date()),
       setLastStateChange: jest.fn().mockResolvedValue(undefined)
-    } as any;
+    } as unknown as jest.Mocked<RedisCircuitBreakerStore>;
 
-    mockMetrics = {
-      setCircuitBreakerState: jest.fn().mockResolvedValue(undefined),
-      incrementCircuitBreakerFailures: jest.fn().mockResolvedValue(undefined),
-      incrementCircuitBreakerRejections: jest.fn().mockResolvedValue(undefined),
-      trackMetric: jest.fn().mockResolvedValue(true)
-    } as any;
+    mockMetrics = createMetricsCollectorMock();
 
     circuitBreaker = new TenantAwareCircuitBreaker(
       mockStore,
       TEST_TENANT,
       TEST_SERVICE,
-      mockMetrics,
-      {
-        failureThreshold: 3,
-        successThreshold: 2,
-        resetTimeoutMs: 30000
-      }
+      mockMetrics
+    );
+  });
+
+  test('should execute commands when circuit is closed', async () => {
+    mockStore.getState.mockResolvedValue(CircuitState.CLOSED);
+    
+    const mockFn = jest.fn().mockResolvedValue('success');
+    const result = await circuitBreaker.execute(mockFn);
+    
+    expect(result).toBe('success');
+    expect(mockFn).toHaveBeenCalled();
+  });
+
+  test('should reject commands when circuit is open', async () => {
+    mockStore.getState.mockResolvedValue(CircuitState.OPEN);
+    mockStore.getLastStateChange.mockResolvedValue(new Date());
+    
+    const mockFn = jest.fn().mockResolvedValue('success');
+    
+    await expect(circuitBreaker.execute(mockFn)).rejects.toThrow();
+    expect(mockFn).not.toHaveBeenCalled();
+    expect(mockMetrics.incrementCircuitBreakerRejections).toHaveBeenCalledWith(
+      TEST_TENANT,
+      TEST_SERVICE
+    );
+  });
+
+  test('should transition to half-open after reset timeout', async () => {
+    mockStore.getState.mockResolvedValue(CircuitState.OPEN);
+    
+    // Set last state change to be older than reset timeout
+    const pastDate = new Date();
+    pastDate.setMinutes(pastDate.getMinutes() - 10);
+    mockStore.getLastStateChange.mockResolvedValue(pastDate);
+    
+    const mockFn = jest.fn().mockResolvedValue('success');
+    const result = await circuitBreaker.execute(mockFn);
+    
+    expect(result).toBe('success');
+    expect(mockStore.setState).toHaveBeenCalledWith(
+      TEST_TENANT,
+      TEST_SERVICE,
+      CircuitState.HALF_OPEN
+    );
+    expect(mockMetrics.setCircuitBreakerState).toHaveBeenCalledWith(
+      TEST_TENANT,
+      TEST_SERVICE,
+      CircuitState.HALF_OPEN
     );
   });
 

@@ -3,15 +3,17 @@ module.exports = {
   testEnvironment: 'jsdom',
   roots: ['<rootDir>/src', '<rootDir>/tests'],
   transform: {
-    '^.+\\.tsx?$': 'ts-jest',
+    '^.+\\.(ts|tsx)$': ['ts-jest', {
+      tsconfig: 'tsconfig.test.json'
+    }]
   },
   testRegex: '(/__tests__/.*|(\\.|/)(test|spec))\\.tsx?$',
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1'
   },
   setupFiles: ['<rootDir>/jest.setup-env.ts'], // Runs BEFORE Jest environment is set up
-  setupFilesAfterEnv: ['<rootDir>/jest.setup-after.ts'], // Runs AFTER Jest is initialized
+  setupFilesAfterEnv: ['<rootDir>/jest.setup-mocks.ts', '<rootDir>/jest.setup-after.ts'], // Run both after files 
   moduleDirectories: ['node_modules', '<rootDir>/src'],
   clearMocks: true,
   resetMocks: true,

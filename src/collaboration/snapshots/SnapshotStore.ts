@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 export interface SnapshotMetadata {
   version: number;
   documentId: string;
-  timestamp: string;
+  timestamp: number;
   eventCount: number;
 }
 
@@ -19,10 +19,10 @@ export interface Snapshot {
   documentId: string;
   tenantId: string;
   version: number;
-  data: any;
+  data: any; // The actual document state
   metadata: SnapshotMetadata;
-  timestamp: string;
-  createdBy?: string;
+  timestamp: number;
+  lastEventId?: string;
 }
 
 /**
