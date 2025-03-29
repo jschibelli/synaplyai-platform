@@ -1,73 +1,74 @@
 import { PrismaClient } from '@prisma/client';
 import { mockDeep, mockReset, DeepMockProxy } from 'jest-mock-extended';
 
-// Mock of Prisma client for testing
-export const prisma = mockDeep<PrismaClient>({
-  // Add the event model that tests need
-  event: {
-    findFirst: jest.fn(),
-    create: jest.fn(),
-    findMany: jest.fn(),
-    count: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
-  },
-  // Add the complianceLog model
-  complianceLog: {
-    findFirst: jest.fn(),
-    create: jest.fn(),
-    findMany: jest.fn(),
-    count: jest.fn(),
-  },
-  // Add the complianceAudit model
-  complianceAudit: {
-    create: jest.fn(),
-    findMany: jest.fn(),
-  },
-  // Add the snapshot model
-  snapshot: {
-    findFirst: jest.fn(),
-    create: jest.fn(),
-    findMany: jest.fn(),
-    count: jest.fn(),
-  },
-  // Add other models as needed
-  user: {
-    findUnique: jest.fn(),
-    findFirst: jest.fn(),
-    findMany: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-  },
-  tenant: {
-    findUnique: jest.fn(),
-    findFirst: jest.fn(),
-    findMany: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-  },
-  document: {
-    findUnique: jest.fn(),
-    findFirst: jest.fn(),
-    findMany: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-  },
-});
-
-// Use this in your beforeEach to reset mocks
-export const prismaMock = prisma as unknown as DeepMockProxy<PrismaClient>;
-
-export const mockReset = () => {
-  mockReset(prismaMock);
+// Create proper mock functions with mockResolvedValue support
+const createMockFunction = () => {
+  const fn = jest.fn();
+  fn.mockResolvedValue = (value) => {
+    fn.mockImplementation(() => Promise.resolve(value));
+    return fn;
+  };
+  fn.mockRejectedValue = (error) => {
+    fn.mockImplementation(() => Promise.reject(error));
+    return fn;
+  };
+  fn.mockResolvedValueOnce = (value) => {
+    fn.mockImplementationOnce(() => Promise.resolve(value));
+    return fn;
+  };
+  fn.mockRejectedValueOnce = (error) => {
+    fn.mockImplementationOnce(() => Promise.reject(error));
+    return fn;
+  };
+  return fn;
 };
 
-// Mock implementation of $transaction
-prismaMock.$transaction.mockImplementation(async (callback) => {
-  if (typeof callback === 'function') {
-    return callback(prismaMock);
-  }
-  return Promise.all(callback);
+// Create mock models
+const createMockModel = () => ({
+  findFirst: createMockFunction(),
+  findMany: createMockFunction(),
+  findUnique: createMockFunction(),
+  create: createMockFunction(),
+  update: createMockFunction(),
+  delete: createMockFunction(),
+  deleteMany: createMockFunction(),
+  count: createMockFunction(),
+  updateMany: createMockFunction(),
+  upsert: createMockFunction()
 });
+
+// Create the prisma mock with ALL required models
+const prisma = {
+  // Required models from test errors
+  event: createMockModel(),
+  snapshot: createMockModel(),
+  document: createMockModel(),
+  user: createMockModel(),
+  complianceLog: createMockModel(),
+  complianceAudit: createMockModel(),
+  
+  // Transaction method
+  $transaction: jest.fn().mockImplementation(async (callback) => {
+    if (typeof callback === 'function') {
+      return callback(prisma);
+    }
+    return Promise.all(callback);
+  }),
+  
+  // For middleware
+  $use: jest.fn().mockImplementation(middleware => prisma),
+  
+  // Connection methods
+  $connect: jest.fn().mockResolvedValue(undefined),
+  $disconnect: jest.fn().mockResolvedValue(undefined)
+};
+
+// Export the mock with proper typing
+export const prismaMock = prisma as unknown as DeepMockProxy<PrismaClient>;
+
+// Reset mock helper function
+export const resetMocks = () => {
+  mockReset(prismaMock);
+};
 
 export default prisma;

@@ -4,6 +4,22 @@ import { MetricsCollector } from '../../../src/services/metrics/MetricsCollector
 import { RedisCircuitBreakerStore } from '../../../src/circuit-breaker/redis-store';
 import { CircuitBreaker } from '../../../src/circuit-breaker/interfaces';
 
+// Add near the top of the file:
+interface AICommandContext {
+  documentId: string;
+  userId: string; 
+  tenantId: string;
+  selection?: {
+    start: number;
+    end: number;
+    text: string;
+  };
+  document?: {
+    content: string;
+    metadata?: any;
+  };
+}
+
 // Add this at the top of your file after imports
 
 // Extend the MetricsCollector for testing
@@ -600,4 +616,10 @@ const command: AICommandOptions = {
     retries: 3,
     priority: 'high'
   }
+};
+
+const context: AICommandContext = {
+  documentId: 'doc-1',
+  userId: 'test-user-1',
+  tenantId: 'test-tenant-1'
 };

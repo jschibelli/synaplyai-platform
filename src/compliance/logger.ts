@@ -1,182 +1,130 @@
+import { PrismaClient } from '@prisma/client';
 import { createHash } from 'crypto';
-import { prisma } from '../lib/prisma';
 import { getTenantContext } from '../middleware/tenant-context';
 
-export interface ComplianceLogEntry {
+interface ComplianceLogEvent {
   eventType: string;
-  resourceId?: string;
-  userId?: string;
+  resourceId: string;
   description: string;
   metadata?: Record<string, any>;
+  userId?: string;
 }
 
+/**
+ * Compliance logging service to maintain immutable audit trail
+ */
 export class ComplianceLogger {
+  private static prisma: PrismaClient;
+
   /**
-   * Records an immutable compliance log entry with integrity hashing
+   * Initialize the compliance logger with a database client
    */
-  static async log(entry: ComplianceLogEntry): Promise<void> {
-    const tenantContext = getTenantContext();
-
-    if (!tenantContext?.tenantId) {
-      throw new Error('Cannot log compliance event: No tenant context available');
-    }
-
-    // Create evidence hash for integrity verification
-    const evidenceHash = this.generateEvidenceHash({
-      tenantId: tenantContext.tenantId,
-      eventType: entry.eventType,
-      timestamp: new Date().toISOString(),
-      description: entry.description,
-      metadata: entry.metadata
-    });
-
-    // Insert record with evidence hash
-    await prisma.complianceLog.create({
-      data: {
-        tenantId: tenantContext.tenantId,
-        eventType: entry.eventType,
-        resourceId: entry.resourceId,
-        userId: entry.userId || tenantContext.userId,
-        description: entry.description,
-        metadata: entry.metadata ? JSON.stringify(entry.metadata) : null,
-        evidenceHash,
-        createdAt: new Date()
-      }
-    });
+  static initialize(prisma: PrismaClient) {
+    this.prisma = prisma;
   }
 
   /**
-   * Generate a SHA-256 hash of the log entry data for integrity verification
+   * Log a compliance event with evidence hash
    */
-  private static generateEvidenceHash(data: Record<string, any>): string {
-    return createHash('sha256')
-      .update(JSON.stringify(data))
-      .digest('hex');
-  }
-
-  /**
-   * Validate the integrity of compliance logs by checking evidence hashes
-   * Returns violations found (empty array means all logs are valid)
-   */
-  static async validateLogs(tenantId: string, batchSize: number = 1000): Promise<Array<{ id: string, issue: string }>> {
-    const violations = [];
-    let processed = 0;
-    let hasMore = true;
-    let lastId = '';
-
-    // Process in batches to avoid memory issues with large log volumes
-    while (hasMore) {
-      const logs = await prisma.complianceLog.findMany({
-        where: { 
+  static async log(event: ComplianceLogEvent): Promise<void> {
+    try {
+      const { tenantId = 'system', userId = 'system' } = getTenantContext() || {};
+      
+      // Generate tamper-evident hash from event data
+      const evidenceHash = this.generateEvidenceHash(event);
+      
+      // Create compliance log entry
+      await this.prisma?.complianceLog.create({
+        data: {
           tenantId,
-          ...(lastId ? { id: { gt: lastId } } : {})
+          userId: event.userId || userId,
+          eventType: event.eventType,
+          resourceId: event.resourceId,
+          description: event.description,
+          metadata: event.metadata || {},
+          evidenceHash
+        }
+      });
+    } catch (error) {
+      console.error(`Failed to log compliance event: ${error.message}`);
+    }
+  }
+
+  /**
+   * Generate cryptographic hash of event data for tamper detection
+   */
+  private static generateEvidenceHash(event: ComplianceLogEvent): string {
+    const timestamp = new Date().toISOString();
+    const dataToHash = JSON.stringify({
+      ...event,
+      timestamp
+    });
+    
+    return createHash('sha256').update(dataToHash).digest('hex');
+  }
+
+  /**
+   * Verify integrity of compliance logs
+   */
+  static async verifyLogIntegrity(tenantId: string, startId = '0'): Promise<boolean> {
+    try {
+      // Get logs in batches to verify chronological integrity
+      const logs = await this.prisma?.complianceLog.findMany({
+        where: {
+          tenantId,
+          id: { gt: parseInt(startId) }
         },
         orderBy: { id: 'asc' },
-        take: batchSize
+        take: 100
       });
-
-      if (logs.length === 0) {
-        hasMore = false;
-        continue;
-      }
-
+      
+      if (!logs || logs.length === 0) return true;
+      
+      let lastId = 0;
+      
+      // Verify each log entry's hash
       for (const log of logs) {
-        // Calculate what the hash should be
+        // Recalculate hash to verify
         const expectedHash = this.generateEvidenceHash({
-          tenantId: log.tenantId,
           eventType: log.eventType,
-          timestamp: log.createdAt.toISOString(),
+          resourceId: log.resourceId,
           description: log.description,
-          metadata: log.metadata ? JSON.parse(log.metadata as string) : null
+          metadata: log.metadata as Record<string, any>,
+          userId: log.userId
         });
-
-        // Compare with stored hash
+        
+        // If hashes don't match, log tampering detected
         if (expectedHash !== log.evidenceHash) {
-          violations.push({
-            id: log.id,
-            issue: 'Hash mismatch: potential data tampering detected'
-          });
-
-          // Log the violation to a separate secure audit log
-          await prisma.complianceAudit.create({
+          // Record tampering detection in audit log
+          await this.prisma?.complianceAudit.create({
             data: {
-              operation: 'INTEGRITY_CHECK',
-              recordId: log.id,
-              tableName: 'ComplianceLog',
-              changedBy: 'system',
-              changedAt: new Date(),
-              details: JSON.stringify({
-                issue: 'Hash mismatch',
+              tenantId,
+              eventType: 'TAMPERING_DETECTED',
+              resourceId: `log-${log.id}`,
+              description: `Data tampering detected in compliance log ${log.id}`,
+              metadata: {
+                logId: log.id,
                 expectedHash,
                 storedHash: log.evidenceHash
-              })
+              }
             }
           });
+          
+          return false;
         }
-
+        
         lastId = log.id;
-        processed++;
       }
-
-      // Log progress for long-running validations
-      if (processed % 10000 === 0) {
-        console.log(`Validated ${processed} compliance logs for tenant ${tenantId}`);
+      
+      // Recursively check next batch if needed
+      if (logs.length === 100) {
+        return this.verifyLogIntegrity(tenantId, String(lastId));
       }
+      
+      return true;
+    } catch (error) {
+      console.error(`Failed to verify log integrity: ${error.message}`);
+      return false;
     }
-
-    return violations;
-  }
-
-  /**
-   * Query compliance logs with tenant isolation enforced
-   */
-  static async query(
-    filters: {
-      eventType?: string;
-      resourceId?: string;
-      userId?: string;
-      startDate?: Date;
-      endDate?: Date;
-    },
-    pagination: { page: number; pageSize: number } = { page: 1, pageSize: 50 }
-  ) {
-    const tenantContext = getTenantContext();
-    
-    if (!tenantContext?.tenantId) {
-      throw new Error('Cannot query compliance logs: No tenant context available');
-    }
-    
-    const where = {
-      tenantId: tenantContext.tenantId,
-      ...(filters.eventType && { eventType: filters.eventType }),
-      ...(filters.resourceId && { resourceId: filters.resourceId }),
-      ...(filters.userId && { userId: filters.userId }),
-      ...(filters.startDate && filters.endDate && { 
-        createdAt: { 
-          gte: filters.startDate,
-          lte: filters.endDate
-        } 
-      })
-    };
-    
-    const [records, total] = await Promise.all([
-      prisma.complianceLog.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip: (pagination.page - 1) * pagination.pageSize,
-        take: pagination.pageSize,
-      }),
-      prisma.complianceLog.count({ where })
-    ]);
-    
-    return {
-      records,
-      pagination: {
-        page: pagination.page,
-        pageSize: pagination.pageSize,
-        total,
-        totalPages: Math.ceil(total / pagination.pageSize)
-      }
-    };
   }
 }

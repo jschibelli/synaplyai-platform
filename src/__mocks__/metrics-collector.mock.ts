@@ -24,30 +24,30 @@ export function createMetricsCollectorMock() {
     track: jest.fn().mockResolvedValue(undefined),
     
     // Circuit breaker methods
-    setCircuitBreakerState: createTypedMock().mockResolvedValue(undefined),
-    getCircuitBreakerState: createTypedMock().mockResolvedValue(CircuitState.CLOSED),
-    incrementCircuitBreakerFailures: createTypedMock().mockResolvedValue(undefined),
-    incrementCircuitBreakerRejections: createTypedMock().mockResolvedValue(undefined),
+    setCircuitBreakerState: jest.fn().mockResolvedValue(undefined),
+    getCircuitBreakerState: jest.fn().mockResolvedValue(CircuitState.CLOSED),
+    incrementCircuitBreakerFailures: jest.fn().mockResolvedValue(undefined),
+    incrementCircuitBreakerRejections: jest.fn().mockResolvedValue(undefined),
     
     // Filter pipeline methods
-    incrementFilterResult: createTypedMock().mockResolvedValue(undefined),
-    recordFilterLatency: createTypedMock().mockResolvedValue(undefined),
-    recordPipelineLatency: createTypedMock().mockResolvedValue(undefined),
-    incrementPipelineResult: createTypedMock().mockResolvedValue(undefined),
-    incrementPipelineErrors: createTypedMock().mockResolvedValue(undefined),
+    incrementFilterResult: jest.fn().mockResolvedValue(undefined),
+    recordFilterLatency: jest.fn().mockResolvedValue(undefined),
+    recordPipelineLatency: jest.fn().mockResolvedValue(undefined),
+    incrementPipelineResult: jest.fn().mockResolvedValue(undefined),
+    incrementPipelineErrors: jest.fn().mockResolvedValue(undefined),
     
     // Usage tracking
-    trackIdentifier: createTypedMock().mockResolvedValue(undefined),
-    trackEvent: createTypedMock().mockResolvedValue(undefined),
-    trackValue: createTypedMock().mockResolvedValue(undefined),
+    trackIdentifier: jest.fn().mockResolvedValue(undefined),
+    trackEvent: jest.fn().mockResolvedValue(undefined),
+    trackValue: jest.fn().mockResolvedValue(undefined),
     
     // Query methods
-    getFilterResults: createTypedMock().mockResolvedValue({
+    getFilterResults: jest.fn().mockResolvedValue({
       BLOCKED: 0,
       ALLOWED: 0,
       FLAGGED: 0
     }),
-    getPercentileLatency: createTypedMock().mockResolvedValue(100),
+    getPercentileLatency: jest.fn().mockResolvedValue(100),
     getAverageValue: jest.fn().mockResolvedValue(50),
     getCounter: jest.fn().mockResolvedValue(10),
     getCountValue: jest.fn().mockResolvedValue(5),

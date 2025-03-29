@@ -1,3 +1,4 @@
+/// <reference path="./jest.setup-mocks.ts" />
 import '@testing-library/jest-dom';
 import { ReactNode } from 'react';
 import { CircuitState } from './src/lib/circuit-breaker';
@@ -8,6 +9,7 @@ import { createDocumentEditorMock } from './src/__mocks__/document-editor.mock';
 import { MockWebSocket } from './__mocks__/websocket.mock';
 
 import { cleanup } from '@testing-library/react';
+import { createMockMetricsCollector } from './jest.setup-mocks';
 
 // Make sure DOM matchers are available in tests
 expect.extend({
@@ -44,7 +46,6 @@ declare global {
     }
   }
   
-  var mockMetricsCollector: ReturnType<typeof createMetricsCollectorMock>;
   var mockCircuitBreaker: ReturnType<typeof createCircuitBreakerMock>;
   var CommandRegistry: ReturnType<typeof createCommandRegistryMock>;
   var tenantContextStorage: {
@@ -53,7 +54,7 @@ declare global {
   var cleanup: () => void;  // ✅ Define by function signature instead of self-reference
   
   // Add these to fix the global index signature errors
-  var createMockDocument: jest.Mock;
+  var createMockDocument: (props?: any) => any;
   var generateRandomOperations: jest.Mock;
   
   // Update WebSocket declaration to accept string | URL
@@ -133,7 +134,7 @@ global.tenantContextStorage = {
 };
 
 // Create properly typed global mock objects
-global.mockMetricsCollector = createMetricsCollectorMock();
+const setupMetricsCollector = createMockMetricsCollector();
 global.mockCircuitBreaker = createCircuitBreakerMock();
 
 // Replace the problematic code with this

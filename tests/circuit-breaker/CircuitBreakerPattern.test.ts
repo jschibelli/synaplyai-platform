@@ -1,6 +1,6 @@
 import { TenantAwareCircuitBreaker } from '../../src/circuit-breaker/tenant-breaker';
 import { RedisCircuitBreakerStore } from '../../src/circuit-breaker/redis-store';
-import { CircuitState } from '../../src/lib/circuit-breaker';
+import { CircuitState, CircuitBreakerInterface } from '../../src/lib/circuit-breaker';
 import { createMetricsCollectorMock } from '../../src/__mocks__/metrics-collector.mock';
 
 describe('Circuit Breaker Pattern', () => {
@@ -10,6 +10,18 @@ describe('Circuit Breaker Pattern', () => {
   
   const TEST_TENANT = 'test-tenant-1';
   const TEST_SERVICE = 'ai-completion-service';
+
+  // Update test mocks to use the interface
+  const mockCircuitBreaker: CircuitBreakerInterface = {
+    state: CircuitState.CLOSED,
+    failureCount: 0,
+    successCount: 0,
+    lastStateChange: Date.now(),
+    execute: jest.fn().mockImplementation(fn => fn()),
+    executeWithBulkhead: jest.fn().mockImplementation((fn, limit) => fn()),
+    serviceName: 'test-service',
+    transitionToState: jest.fn().mockResolvedValue(undefined)
+  };
 
   beforeEach(() => {
     mockStore = {

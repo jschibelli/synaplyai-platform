@@ -1,58 +1,52 @@
-import { Conflict, ConflictType } from '../../src/conflicts/ConflictResolver';
+import { Conflict } from '../../src/conflicts/ConflictResolver';
 import { Operation } from '../../src/collaborative/OperationalTransform';
 import { VectorClock } from '../../src/collaborative/VectorClock';
+import { ConflictType } from '../../src/collaboration/conflict/types';
+import { 
+  createMockConflict, 
+  createMockResolution 
+} from '../../src/tests/test-helpers';
 
 /**
- * Create a test conflict for use in tests
+ * Re-exports from src/tests/test-helpers to maintain compatibility
  */
-export function createTestConflict(overrides?: Partial<Conflict>): Conflict {
-  const defaultConflict: Conflict = {
-    id: 'conflict-1',
-    type: ConflictType.TEXT_EDIT,
-    localContent: 'Local content version',
-    remoteContent: 'Remote content version',
-    operations: {
-      local: {
-        type: 'insert',
-        position: 0,
-        text: 'Local '
-      } as Operation,
-      remote: {
-        type: 'insert',
-        position: 0,
-        text: 'Remote '
-      } as Operation
-    },
-    vectorClocks: {
-      local: new VectorClock('node-1', 1),
-      remote: new VectorClock('node-2', 1)
-    }
-  };
+export { 
+  createMockConflict, 
+  createMockResolution 
+};
 
+/**
+ * Creates a test conflict for testing purposes
+ */
+export function createTestConflict(props: any = {}) {
   return {
-    ...defaultConflict,
-    ...overrides
+    id: props.id || 'conflict-1',
+    documentId: props.documentId || 'doc-1', 
+    type: props.type || ConflictType.TEXT_EDIT,
+    local: props.local || {},
+    remote: props.remote || {},
+    localContent: props.localContent || 'Local content',
+    remoteContent: props.remoteContent || 'Remote content',
+    userId: props.userId || 'test-user',
+    createdAt: props.createdAt || new Date(),
+    resolvedAt: props.resolvedAt,
+    resolution: props.resolution
   };
 }
 
 /**
- * Create a mock document for testing
+ * Creates a mock document for testing purposes
  */
-export function createMockDocument(options: {
-  id: string;
-  content: string;
-  version?: number;
-  userId?: string;
-  tenantId?: string;
-}) {
+export function createMockDocument(props: any = {}) {
   return {
-    id: options.id,
-    content: options.content,
-    version: options.version || 1,
-    userId: options.userId || 'user-1',
-    tenantId: options.tenantId || 'tenant-1',
-    metadata: {},
-    formatting: {}
+    id: props.id || 'doc-123',
+    content: props.content || 'Test document content',
+    version: props.version || 1,
+    metadata: props.metadata || {},
+    userId: props.userId || 'user-1',
+    tenantId: props.tenantId || 'tenant-1',
+    createdAt: props.createdAt || new Date(),
+    updatedAt: props.updatedAt || new Date()
   };
 }
 
@@ -71,14 +65,14 @@ export class MockWebSocket {
   }
 
   off(event: string): void {
-    this.listeners[event] = [];
+    delete this.listeners[event];
   }
 
   emit(event: string, data: any): void {
-    this.messages.push({ event, data });
     if (this.listeners[event]) {
       this.listeners[event].forEach(callback => callback(data));
     }
+    this.messages.push({ event, data });
   }
 
   triggerMessage(message: string): void {

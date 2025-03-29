@@ -1,13 +1,11 @@
 import { CommandHandler, CommandRegistry } from "../commands/CommandRegistry";
-import { getTenantContext } from "../lib/tenant-context";
+import { getTenantContext, TenantContext } from "../lib/tenant-context";
 import { estimateCommandTokens, trackTokenUsage } from "./tokenUtils";
 import { DocumentContext } from './ContextProvider'; // Import only DocumentContext
-import { AIService } from './AIService';
-import { CircuitBreaker } from '../circuit-breaker/CircuitBreaker';
-import { MetricsCollector } from '../services/metrics/MetricsCollector';
-import { AIAnalysisResult } from './AIAnalysis';
-import { TenantContext } from '../lib/tenant-context';
+import { AIService, AIAnalysisResult } from './AIService';
 import { AICommandContext } from './AICommandContext'; // Change this line
+import { MetricsCollector } from '../services/metrics/MetricsCollector';
+import { CircuitBreaker } from '../lib/circuit-breaker';
 
 /**
  * Interface for AI command analysis parameters
@@ -61,7 +59,7 @@ export interface AICommandContextParameters {
   windowSize: number;
   includePreceding: boolean;
   includeFollowing: boolean;
-  includeDocument?: boolean;
+  includeDocument: boolean;
   includeMetadata?: boolean;
   trackCollaborativeChanges?: boolean;
   detectIntent?: boolean;
@@ -324,5 +322,30 @@ export interface TextRewriteCommand extends AICommand {
   selectionStart: number;
   selectionEnd: number;
   instructions: string;
+}
+
+
+
+export interface AICommandContext {
+  documentId: string;
+  userId: string;
+  tenantId: string;
+  document?: {
+    content: string;
+    metadata?: any;
+  };
+  selection?: {
+    start: number;
+    end: number;
+    text: string;
+  };
+  aiAnalysisResult?: any;
+  selectedText?: string;
+  precedingText?: string;
+  followingText?: string;
+  documentMetadata?: any;
+  onProgress?: (update: string) => void;
+  onToken?: (token: any) => void;
+  [key: string]: any;
 }
 

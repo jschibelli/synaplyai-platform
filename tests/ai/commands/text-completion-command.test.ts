@@ -1,7 +1,7 @@
-import { createTextCompletionHandler, CompleteTextCommand, TextCompletedEvent } from '../../../src/ai/commands/text-completion-command';
-import { AIAnalysisResult } from '../../../src/ai/AICommandRegistry';
-import { DocumentContext } from '../../../src/ai/ContextProvider';
+import { createTextCompletionHandler } from '../../../src/ai/commands/text-completion-command';
+import { AIAnalysisResult, DocumentContext } from '../../../src/tests/test-interfaces';
 import { getTenantContext } from '../../../src/lib/tenant-context';
+import { createCompleteTextCommand } from '../../../src/tests/test-helpers';
 
 // Mock dependencies
 jest.mock('../../../src/lib/tenant-context');
@@ -30,7 +30,8 @@ describe('Text Completion Command', () => {
     contextParameters: {
       windowSize: 100,
       includePreceding: true,
-      includeFollowing: false
+      includeFollowing: false,
+      includeDocument: true
     }
   });
   
@@ -38,19 +39,17 @@ describe('Text Completion Command', () => {
   const testContext: DocumentContext = {
     precedingText: 'This is text before the cursor. The document discusses',
     documentMetadata: { id: testDocumentId },
-    tenantContext: { tenantId: testTenantId, userId: testUserId }
-  };
-  
-  // Sample AI analysis result
-  const testAnalysis: AIAnalysisResult = {
-    content: 'important architectural considerations for system design. The key aspects include scalability, reliability, and performance.',
-    modelId: 'gpt-4',
-    totalTokens: 150,
-    promptTokens: 100,
-    completionTokens: 50,
-    metadata: {
-      responseTime: 500,
-      operationId: 'test-op-123'
+    tenantContext: { tenantId: testTenantId, userId: testUserId },
+    aiAnalysisResult: {
+      content: 'important architectural considerations for system design. The key aspects include scalability, reliability, and performance.',
+      modelId: 'gpt-4',
+      totalTokens: 150,
+      promptTokens: 100,
+      completionTokens: 50,
+      metadata: {
+        responseTime: 500,
+        operationId: 'test-op-123'
+      }
     }
   };
   
@@ -69,8 +68,14 @@ describe('Text Completion Command', () => {
   });
   
   test('should require AI analysis result', async () => {
-    // Call handler without analysis result
-    await expect(textCompletionHandler(testCommand, testContext, undefined))
+    // Create context without AI analysis result
+    const contextWithoutAnalysis = {
+      ...testContext,
+      aiAnalysisResult: undefined
+    };
+    
+    // Test with execute method
+    await expect(textCompletionHandler.execute(testCommand, contextWithoutAnalysis))
       .rejects
       .toThrow('AI analysis is required for text completion');
     
@@ -80,14 +85,14 @@ describe('Text Completion Command', () => {
   
   test('should create an INSERT_TEXT command from AI completion', async () => {
     // Execute handler
-    await textCompletionHandler(testCommand, testContext, testAnalysis);
+    await textCompletionHandler.execute(testCommand, testContext);
     
     // Verify INSERT_TEXT command was executed with correct parameters
     expect(mockCommandRegistry.execute).toHaveBeenCalledWith({
       type: 'INSERT_TEXT',
       documentId: testDocumentId,
       position: testCommand.position,
-      text: testAnalysis.content,
+      text: testContext.aiAnalysisResult?.content,
       userId: testUserId
     });
   });
@@ -97,20 +102,20 @@ describe('Text Completion Command', () => {
     mockCommandRegistry.execute.mockResolvedValue({
       documentId: testDocumentId,
       position: 100,
-      insertedText: testAnalysis.content
+      insertedText: testContext.aiAnalysisResult?.content
     });
     
     // Execute handler
-    const result = await textCompletionHandler(testCommand, testContext, testAnalysis);
+    const result = await textCompletionHandler.execute(testCommand, testContext);
     
     // Verify event structure
     expect(result).toMatchObject({
       documentId: testDocumentId,
       position: testCommand.position,
-      text: testAnalysis.content,
+      text: testContext.aiAnalysisResult?.content,
       userId: testUserId,
       aiGenerated: true,
-      modelId: testAnalysis.modelId,
+      modelId: testContext.aiAnalysisResult?.modelId,
       prompt: testCommand.prompt
     });
   });
@@ -121,20 +126,23 @@ describe('Text Completion Command', () => {
     mockCommandRegistry.execute.mockRejectedValue(testError);
     
     // Execute handler and expect error
-    await expect(textCompletionHandler(testCommand, testContext, testAnalysis))
+    await expect(textCompletionHandler.execute(testCommand, testContext))
       .rejects
       .toThrow('Document not found');
   });
   
   test('should handle empty AI analysis result gracefully', async () => {
     // Create empty analysis
-    const emptyAnalysis = {
-      ...testAnalysis,
-      content: ''
+    const contextWithEmptyAnalysis = {
+      ...testContext,
+      aiAnalysisResult: {
+        ...testContext.aiAnalysisResult!,
+        content: ''
+      }
     };
     
     // Execute handler
-    await textCompletionHandler(testCommand, testContext, emptyAnalysis);
+    await textCompletionHandler.execute(testCommand, contextWithEmptyAnalysis);
     
     // Verify INSERT_TEXT command was executed with empty string
     expect(mockCommandRegistry.execute).toHaveBeenCalledWith(
@@ -156,14 +164,14 @@ describe('Text Completion Command', () => {
     };
     
     // Execute handler
-    await textCompletionHandler(testCommand, enrichedContext, testAnalysis);
+    await textCompletionHandler.execute(testCommand, enrichedContext);
     
     // Command execution should be the same regardless of context metadata
     expect(mockCommandRegistry.execute).toHaveBeenCalledWith({
       type: 'INSERT_TEXT',
       documentId: testDocumentId,
       position: testCommand.position,
-      text: testAnalysis.content,
+      text: testContext.aiAnalysisResult?.content,
       userId: testUserId
     });
   });

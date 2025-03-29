@@ -13,7 +13,7 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/src/$1'
   },
   setupFiles: ['<rootDir>/jest.setup-env.ts'], // Runs BEFORE Jest environment is set up
-  setupFilesAfterEnv: ['<rootDir>/jest.setup-after.ts'], // Runs AFTER Jest is initialized
+  setupFilesAfterEnv: ['<rootDir>/jest.setup-mocks.ts'], // Just use one setup file
   moduleDirectories: ['node_modules', '<rootDir>/src'],
   clearMocks: true,
   resetMocks: true,

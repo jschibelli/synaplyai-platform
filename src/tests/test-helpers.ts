@@ -49,22 +49,28 @@ export function createStandardContextParameters(
  * Creates a complete text command for testing
  */
 export function createCompleteTextCommand(
-  overrides: Partial<CompleteTextCommand> = {}
+  props: Partial<CompleteTextCommand> = {}
 ): CompleteTextCommand {
   return {
     type: 'COMPLETE_TEXT',
-    documentId: 'doc-123',
-    userId: 'user-1',
-    position: 10,
-    contextParameters: createStandardContextParameters(),
-    requiresAIAnalysis: true,
-    analysisParameters: {
-      type: 'COMPLETE_TEXT',
+    documentId: props.documentId || 'doc-1',
+    userId: props.userId || 'user-1',
+    position: props.position ?? 0, // Use nullish coalescing to ensure position is defined
+    prompt: props.prompt || 'Complete this text',
+    contextParameters: {
+      windowSize: props.contextParameters?.windowSize || 100,
+      includePreceding: props.contextParameters?.includePreceding ?? true,
+      includeFollowing: props.contextParameters?.includeFollowing ?? false,
+      includeDocument: props.contextParameters?.includeDocument ?? true // Add missing property
+    },
+    analysisParameters: props.analysisParameters || {
+      type: 'GENERATE_TEXT',
       model: 'gpt-4',
       temperature: 0.7,
       maxTokens: 100
     },
-    ...overrides
+    requiresAIAnalysis: true,
+    ...props
   };
 }
 
