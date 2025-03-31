@@ -1,6 +1,9 @@
+import 'jest-environment-jsdom';
 import { CircuitState } from './src/lib/circuit-breaker';
-// Import instead of redefining - this fixes the conflict
-import { MockCircuitBreaker, createCircuitBreakerMock } from './__mocks__/circuit-breaker.mock';
+// Fix: Import just createCircuitBreakerMock since MockCircuitBreaker doesn't exist
+import { MockCircuitBreaker, createCircuitBreakerMock, circuitBreakerMock } from './__mocks__/circuit-breaker.mock';
+import { createMetricsCollectorMock } from './src/__mocks__/metrics-collector.mock';
+import { getTenantContextMock, setTenantContextMock, clearTenantContextMock } from './src/__mocks__/tenant-context.mock';
 import prisma from './__mocks__/prisma.mock';
 
 // Define interfaces first for better TypeScript support
@@ -123,6 +126,7 @@ class MockWebSocket {
 // Create mock instances - use the factory
 const mockMetricsCollector = createMockMetricsCollector();
 const mockCircuitBreaker = createCircuitBreakerMock();
+export const metricsCollectorMock = createMetricsCollectorMock();
 
 // Define global types - no longer using typeof references to avoid circular references
 declare global {

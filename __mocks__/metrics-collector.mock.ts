@@ -31,3 +31,23 @@ Object.keys(mockMetricsCollector).forEach(key => {
 
 // Export with proper type casting that preserves both MetricsCollector interface and Jest mock methods
 export default mockMetricsCollector as unknown as jest.Mocked<MetricsCollector>;
+
+export function createMetricsCollectorMock() {
+  return {
+    trackEvent: jest.fn(),
+    trackMetric: jest.fn(),
+    incrementCounter: jest.fn(),
+    recordLatency: jest.fn(),
+    recordTokenUsage: jest.fn(),
+    flush: jest.fn().mockResolvedValue(undefined),
+    getMetrics: jest.fn().mockReturnValue({
+      requestCount: 0,
+      tokenCount: 0,
+      errorCount: 0,
+      avgLatency: 0
+    })
+  };
+}
+
+// Create a pre-initialized instance that can be imported directly
+export const metricsCollectorMock = createMetricsCollectorMock();

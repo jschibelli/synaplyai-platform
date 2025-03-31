@@ -1,55 +1,46 @@
-import { CircuitState } from '../src/lib/circuit-breaker';
+import { jest } from '@jest/globals';
 
-/**
- * MockCircuitBreaker interface - single source of truth for circuit breaker mocks
- */
-export interface MockCircuitBreaker {
-  serviceName: string;
-  state: CircuitState;
-  failureCount: number;
-  successCount: number;
-  lastStateChange: number;
-  execute: jest.Mock;
-  executeWithBulkhead: jest.Mock;
-  getState: jest.Mock;
-  recordSuccess: jest.Mock;
-  recordFailure: jest.Mock;
-  transitionState: jest.Mock;
-  transitionToState: jest.Mock;
-  shouldAttemptReset: jest.Mock;
-  options: {
-    failureThreshold: number;
-    successThreshold: number;
-    resetTimeoutMs: number;
-  };
+// Define CircuitState enum directly in the mock to avoid circular dependencies
+export enum CircuitState {
+  CLOSED = 'CLOSED',
+  OPEN = 'OPEN',
+  HALF_OPEN = 'HALF_OPEN'
 }
 
+// Define a type for executable functions to fix the TypeScript error
+type ExecutableFunction = (...args: any[]) => any;
+
 /**
- * Create a circuit breaker mock with all required methods
- * Ensures all mock methods are properly created with jest.fn()
+ * Factory function to create a circuit breaker mock
  */
-export function createCircuitBreakerMock(): MockCircuitBreaker {
+export function createCircuitBreakerMock() {
   return {
+    // Fix: Add proper type for the function parameter
+    execute: jest.fn().mockImplementation((fn: ExecutableFunction) => fn()),
+    getState: jest.fn().mockReturnValue(CircuitState.CLOSED),
+    setState: jest.fn(),
+    incrementFailures: jest.fn().mockReturnValue(0),
+    incrementSuccesses: jest.fn().mockReturnValue(0),
+    resetCounters: jest.fn(),
+    close: jest.fn(),
+    open: jest.fn(),
+    halfOpen: jest.fn(),
+    isOpen: jest.fn().mockReturnValue(false),
+    isClosed: jest.fn().mockReturnValue(true),
+    isHalfOpen: jest.fn().mockReturnValue(false),
+    onStateChange: jest.fn(),
+    // Fix: Add proper type for the function parameter
+    executeWithBulkhead: jest.fn().mockImplementation((fn: ExecutableFunction) => fn()),
     serviceName: 'test-service',
-    state: CircuitState.CLOSED,
-    failureCount: 0,
-    successCount: 0,
-    lastStateChange: Date.now(),
-    execute: jest.fn().mockImplementation(fn => fn()),
-    executeWithBulkhead: jest.fn().mockImplementation((fn, concurrencyLimit = 10) => fn()),
-    getState: jest.fn().mockResolvedValue(CircuitState.CLOSED),
-    recordSuccess: jest.fn().mockResolvedValue(undefined),
-    recordFailure: jest.fn().mockResolvedValue(undefined),
-    transitionState: jest.fn().mockResolvedValue(undefined),
-    transitionToState: jest.fn().mockResolvedValue(undefined),
-    shouldAttemptReset: jest.fn().mockReturnValue(false),
-    options: {
-      failureThreshold: 5,
-      successThreshold: 2,
-      resetTimeoutMs: 30000
-    }
+    transitionToState: jest.fn().mockImplementation(() => Promise.resolve())
   };
 }
 
-// Export a singleton instance for convenience
+// Create a pre-initialized instance that can be imported directly
 export const circuitBreakerMock = createCircuitBreakerMock();
+
+// Export the mock type for use in tests
+export type MockCircuitBreaker = ReturnType<typeof createCircuitBreakerMock>;
+
+// Default export for backwards compatibility
+export default circuitBreakerMock;

@@ -1,85 +1,44 @@
+import { jest } from '@jest/globals';
 
-import { createTypedMock } from './jest-mock-extensions';
-import { CircuitState } from '../lib/circuit-breaker';
+// Define CircuitState enum directly to avoid circular dependencies
+export enum CircuitState {
+  CLOSED = 'CLOSED',
+  OPEN = 'OPEN',
+  HALF_OPEN = 'HALF_OPEN'
+}
 
+// Type for functions that will be passed to execute methods
+type ExecutableFunction = (...args: any[]) => any;
+
+/**
+ * Factory function to create a circuit breaker mock
+ */
 export function createCircuitBreakerMock() {
   return {
-    // Required properties from errors
-    state: CircuitState.CLOSED,
-    failureCount: 0,
-    successCount: 0,
-    lastStateChange: Date.now(),
-    
-    // Required methods
-    execute: jest.fn().mockImplementation(fn => fn()),
-    executeWithBulkhead: jest.fn().mockImplementation(fn => fn()),
-    recordSuccess: jest.fn().mockResolvedValue(undefined),
-    recordFailure: jest.fn().mockResolvedValue(undefined),
-    getState: jest.fn().mockResolvedValue(CircuitState.CLOSED),
-    reset: jest.fn().mockResolvedValue(undefined),
-    transitionState: jest.fn().mockResolvedValue(undefined),
-    shouldAttemptReset: jest.fn().mockReturnValue(false),
-    
-    // Configuration
-    options: {
-      failureThreshold: 3,
-      successThreshold: 2,
-      resetTimeoutMs: 30000
-    },
-    serviceName: 'test-service'
+    execute: jest.fn().mockImplementation((fn: ExecutableFunction) => fn()),
+    getState: jest.fn().mockReturnValue(CircuitState.CLOSED),
+    setState: jest.fn(),
+    incrementFailures: jest.fn().mockReturnValue(0),
+    incrementSuccesses: jest.fn().mockReturnValue(0),
+    resetCounters: jest.fn(),
+    close: jest.fn(),
+    open: jest.fn(),
+    halfOpen: jest.fn(),
+    isOpen: jest.fn().mockReturnValue(false),
+    isClosed: jest.fn().mockReturnValue(true),
+    isHalfOpen: jest.fn().mockReturnValue(false),
+    onStateChange: jest.fn(),
+    executeWithBulkhead: jest.fn().mockImplementation((fn: ExecutableFunction) => fn()),
+    serviceName: 'test-service',
+    transitionToState: jest.fn().mockImplementation(() => Promise.resolve())
   };
 }
 
+// Create a pre-initialized instance that can be imported directly
 export const circuitBreakerMock = createCircuitBreakerMock();
-=======
-import { CircuitBreaker, CircuitState } from '../lib/circuit-breaker';
 
-/**
- * Create a standardized CircuitBreaker mock that implements all needed methods
- * Used across all tests to ensure consistency
- */
-export const createCircuitBreakerMock = () => ({
-  // Base methods from CircuitBreaker
-  execute: jest.fn().mockImplementation(fn => fn()),
-  getState: jest.fn().mockResolvedValue(CircuitState.CLOSED),
-  recordSuccess: jest.fn().mockResolvedValue(undefined),
-  recordFailure: jest.fn().mockResolvedValue(undefined),
-  transitionState: jest.fn().mockResolvedValue(undefined),
-  shouldAttemptReset: jest.fn().mockReturnValue(false),
-  getTenantId: jest.fn().mockReturnValue('test-tenant'),
-  
-  // AdaptiveCircuitBreaker methods
-  executeWithBulkhead: jest.fn().mockImplementation(fn => fn()),
-  updateThresholds: jest.fn().mockResolvedValue(undefined),
-  
-  // Internal methods exposed for testing
-  getStore: jest.fn().mockReturnValue({
-    incrementCounter: jest.fn().mockResolvedValue(0),
-    decrementCounter: jest.fn().mockResolvedValue(0),
-    getState: jest.fn().mockResolvedValue(CircuitState.CLOSED),
-    setState: jest.fn().mockResolvedValue(undefined),
-    incrementFailures: jest.fn().mockResolvedValue(0),
-    incrementSuccesses: jest.fn().mockResolvedValue(0),
-    resetCounters: jest.fn().mockResolvedValue(undefined),
-    getLastStateChange: jest.fn().mockResolvedValue(new Date()),
-    setLastStateChange: jest.fn().mockResolvedValue(undefined)
-  }),
-
-  // Event handling
-  on: jest.fn(),
-  once: jest.fn(),
-  emit: jest.fn(),
-  eventEmitter: {
-    on: jest.fn(),
-    once: jest.fn(),
-    emit: jest.fn()
-  }
-});
-
-/**
- * Singleton instance for convenience
- */
-export const circuitBreakerMock = createCircuitBreakerMock();
+// Default export for backwards compatibility
+export default circuitBreakerMock;
 
 /**
  * Helper to create a CircuitState-compatible value regardless of how it's defined

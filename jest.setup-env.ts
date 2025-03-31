@@ -1,8 +1,10 @@
 import 'jest-environment-jsdom';
 
 import { circuitBreakerMock } from './src/__mocks__/circuit-breaker.mock';
-import { metricsCollectorMock } from './src/__mocks__/metrics-collector.mock';
+import { createMetricsCollectorMock } from './src/__mocks__/metrics-collector.mock';
 import { getTenantContextMock, setTenantContextMock, clearTenantContextMock } from './src/__mocks__/tenant-context.mock';
+
+export const metricsCollectorMock = createMetricsCollectorMock();
 
 // Mock implementations for browser APIs not available in Node.js
 global.ResizeObserver = class ResizeObserver {
@@ -179,7 +181,7 @@ Object.defineProperty(process, 'env', {
 });
 
 // Mock modules
-jest.mock('../src/lib/circuit-breaker', () => ({
+jest.mock('./src/lib/circuit-breaker', () => ({
   CircuitBreaker: jest.fn().mockImplementation(() => circuitBreakerMock),
   CircuitState: {
     CLOSED: 'CLOSED',
@@ -188,11 +190,11 @@ jest.mock('../src/lib/circuit-breaker', () => ({
   }
 }));
 
-jest.mock('../src/metrics/metrics-collector', () => ({
+jest.mock('./src/metrics/metrics-collector', () => ({
   MetricsCollector: jest.fn().mockImplementation(() => metricsCollectorMock)
 }));
 
-jest.mock('../src/lib/tenant-context', () => ({
+jest.mock('./src/lib/tenant-context', () => ({
   getTenantContext: getTenantContextMock,
   setTenantContext: setTenantContextMock,
   clearTenantContext: clearTenantContextMock,
