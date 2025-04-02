@@ -16,6 +16,7 @@ export interface MockCircuitBreaker {
   serviceName: string;
   metrics: any;
   
+  // Add all required methods
   execute: jest.Mock;
   executeWithBulkhead: jest.Mock;
   getState: jest.Mock;
@@ -44,6 +45,7 @@ export interface MockCircuitBreaker {
  */
 export function createCircuitBreakerMock(): MockCircuitBreaker {
   return {
+    // Required properties
     state: CircuitState.CLOSED,
     failureCount: 0,
     successCount: 0,
@@ -55,10 +57,11 @@ export function createCircuitBreakerMock(): MockCircuitBreaker {
     serviceName: 'test-service',
     metrics: {},
     
-    // Fix type issues with function parameters
-    execute: jest.fn().mockImplementation(() => Promise.resolve()),
-    executeWithBulkhead: jest.fn().mockImplementation(() => Promise.resolve()),
+    // Fixed version - check if fn is a function before calling it
+    execute: jest.fn().mockImplementation((fn) => Promise.resolve(typeof fn === 'function' ? fn() : undefined)),
+    executeWithBulkhead: jest.fn().mockImplementation((fn) => Promise.resolve(typeof fn === 'function' ? fn() : undefined)),
     
+    // Other methods
     getState: jest.fn().mockReturnValue(CircuitState.CLOSED),
     setState: jest.fn(),
     incrementFailures: jest.fn(),
@@ -77,17 +80,11 @@ export function createCircuitBreakerMock(): MockCircuitBreaker {
     recordSuccess: jest.fn(),
     shouldAttemptReset: jest.fn().mockReturnValue(false),
     transitionToState: jest.fn(),
-    // FIX: Use mockImplementation instead of mockResolvedValue 
     checkState: jest.fn().mockImplementation(() => Promise.resolve())
   };
 }
 
 // Export a singleton instance
-export const circuitBreakerMock = {
-  execute: jest.fn().mockImplementation(() => Promise.resolve()),
-  executeWithBulkhead: jest.fn().mockImplementation(() => Promise.resolve()),
-  getState: jest.fn().mockReturnValue('CLOSED'),
-  checkState: jest.fn().mockImplementation(() => Promise.resolve())
-};
+export const circuitBreakerMock = createCircuitBreakerMock();
 
 export default circuitBreakerMock;
