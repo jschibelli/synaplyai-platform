@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 
 /**
- * Mock implementation of CommandRegistry that can be instantiated with new
+ * Mock implementation of CommandRegistry
  */
 export class CommandRegistryMock {
   commands = {};
@@ -23,22 +23,14 @@ export class CommandRegistryMock {
 
   addValidationRule = jest.fn();
   
-  execute = jest.fn().mockResolvedValue("success");
+  execute = jest.fn().mockImplementation(() => Promise.resolve("success"));
   
   executeBatch = jest.fn().mockImplementation((commands) => {
-    return Promise.all(commands.map(() => "success"));
+    return Promise.all(commands.map(() => Promise.resolve("success")));
   });
   
   validateCommand = jest.fn().mockReturnValue({ valid: true, errors: [] });
 }
 
-// Function to create the mock class
-export function createCommandRegistryMock() {
-  return CommandRegistryMock;
-}
-
-// Singleton instance for direct imports
-export const commandRegistryMock = new CommandRegistryMock();
-
-// Default export should be the class itself for "new CommandRegistry()" usage
+// Export the class as default
 export default CommandRegistryMock;

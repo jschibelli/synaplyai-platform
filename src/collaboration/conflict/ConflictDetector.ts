@@ -649,20 +649,17 @@ export class ConflictDetector {
    * Detect if two operations conflict with each other
    */
   detectConflict(op1: VersionedOperation, op2: VersionedOperation): ConflictDetectionResult {
-    // Determine relationship between operations
     const relationship = this.determineRelationship(op1, op2);
     
-    // Only concurrent operations can conflict
     if (relationship !== 'concurrent') {
       return {
         hasConflict: false,
-        relationship: relationship,
+        relationship,
         conflictType: undefined,
         confidenceScore: undefined
       };
     }
     
-    // For concurrent operations, determine conflict type
     const conflictType = this.determineConflictType(op1, op2);
     const hasConflict = !!conflictType;
     

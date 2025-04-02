@@ -28,8 +28,6 @@ export function createTestConflict(testData: any): Conflict {
  * Converts older event format to DocumentEvent
  */
 function convertToDocumentEvent(event: any): DocumentEvent {
-  if (!event) return {} as DocumentEvent;
-  
   return {
     id: event.id || `event-${Date.now()}`,
     documentId: event.documentId || event.aggregateId || 'unknown',
@@ -46,8 +44,4 @@ function convertToDocumentEvent(event: any): DocumentEvent {
 }
 
 // This file implements test helpers for adapter functions
-
-// Add other test helpers as needed
-
-// Export the existing function
 export { convertToDocumentEvent };

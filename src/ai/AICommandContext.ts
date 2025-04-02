@@ -6,7 +6,7 @@ export interface AICommandContextParameters {
   windowSize: number;
   includePreceding: boolean;
   includeFollowing: boolean;
-  includeDocument: boolean;  // <-- This is the missing property in many tests
+  includeDocument: boolean; // Required property
   
   // Optional properties
   position?: number;
@@ -22,7 +22,7 @@ export const defaultAICommandContextParameters: AICommandContextParameters = {
   windowSize: 100,
   includePreceding: true,
   includeFollowing: true,
-  includeDocument: true  // <-- Make sure this is set in the default
+  includeDocument: true // Make sure this is set in the default
 };
 
 /**
