@@ -2,15 +2,13 @@
 import '@testing-library/jest-dom';
 import { ReactNode } from 'react';
 import { CircuitState } from './src/lib/circuit-breaker';
-import { createMetricsCollectorMock } from './src/__mocks__/metrics-collector.mock';
-// Import the interface from the mock file directly
-import { MockCircuitBreaker, createCircuitBreakerMock } from './__mocks__/circuit-breaker.mock';
+import { createCircuitBreakerMock, MockCircuitBreaker } from './__mocks__/circuit-breaker.mock';
 import { createCommandRegistryMock } from './src/__mocks__/command-registry.mock';
 import { createDocumentEditorMock } from './src/__mocks__/document-editor.mock';
 import { MockWebSocket } from './__mocks__/websocket.mock';
-
 import { cleanup } from '@testing-library/react';
-import { createMockMetricsCollector } from './jest.setup-mocks';
+import { createMockMetricsCollector, createTestConflict, createMockDocument } from './jest.setup-mocks';
+import { MetricsCollectorMock } from './__mocks__/metrics-collector.mock';
 
 // Make sure DOM matchers are available in tests
 expect.extend({
@@ -31,7 +29,7 @@ afterEach(() => {
 // Export cleanup for use in tests
 global.cleanup = cleanup;
 
-// Extend the global namespace with our test helpers
+// Make the type declarations match jest.setup-mocks.ts
 declare global {
   namespace jest {
     interface Matchers<R> {
@@ -44,19 +42,24 @@ declare global {
     }
   }
   
-  // IMPORTANT: Reference MockCircuitBreaker from imported module
+  // Match types with those in jest.setup-mocks.ts
+  var mockMetricsCollector: MetricsCollectorMock;
   var mockCircuitBreaker: MockCircuitBreaker;
+  var createMockMetricsCollector: (props?: any) => MetricsCollectorMock;
+  var createTestConflict: (props?: any) => any;
+  var createMockDocument: (props?: any) => any;
+  var MockWebSocket: new () => any;
+  
+  // Additional globals
   var CommandRegistry: ReturnType<typeof createCommandRegistryMock>;
   var tenantContextStorage: {
     run: jest.Mock;
+    getTenantContext: jest.Mock;
+    setTenantContext: jest.Mock;
+    clearTenantContext: jest.Mock;
   };
-  var cleanup: () => void;  // ✅ Define by function signature instead of self-reference
-  
-  // Add these to fix the global index signature errors
-  var createMockDocument: (props?: any) => any;
+  var cleanup: () => void;
   var generateRandomOperations: jest.Mock;
-  
-  // Update WebSocket declaration to accept string | URL
   var WebSocket: {
     new(url: string | URL, protocols?: string | string[] | undefined): WebSocket;
     prototype: WebSocket;
@@ -65,32 +68,6 @@ declare global {
     readonly CLOSING: 2;
     readonly CLOSED: 3;
   };
-  
-  interface WebSocket extends EventTarget {
-    readonly readyState: number;
-    readonly url: string;
-    readonly protocol: string;
-    readonly extensions: string;
-    readonly bufferedAmount: number;
-    binaryType: 'blob' | 'arraybuffer';
-    onopen: ((this: WebSocket, ev: Event) => any) | null;
-    onclose: ((this: WebSocket, ev: CloseEvent) => any) | null;
-    onmessage: ((this: WebSocket, ev: MessageEvent) => any) | null;
-    onerror: ((this: WebSocket, ev: Event) => any) | null;
-    close(code?: number, reason?: string): void;
-    send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void;
-    addEventListener<K extends keyof WebSocketEventMap>(type: K, listener: (this: WebSocket, ev: WebSocketEventMap[K]) => any, options?: boolean | AddEventListenerOptions): void;
-    addEventListener(type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void;
-    removeEventListener<K extends keyof WebSocketEventMap>(type: K, listener: (this: WebSocket, ev: WebSocketEventMap[K]) => any, options?: boolean | EventListenerOptions): void;
-    removeEventListener(type: string, listener: EventListenerOrEventListenerObject, options?: boolean | EventListenerOptions): void;
-  }
-  
-  interface WebSocketEventMap {
-    close: CloseEvent;
-    error: Event;
-    message: MessageEvent;
-    open: Event;
-  }
 }
 
 // Assign the mock class to global WebSocket
@@ -209,7 +186,10 @@ global.generateRandomOperations = jest.fn().mockImplementation((document, count 
 
 // Mock tenant context storage
 global.tenantContextStorage = {
-  run: jest.fn().mockImplementation((context, fn) => fn())
+  run: jest.fn().mockImplementation((context, fn) => fn()),
+  getTenantContext: jest.fn(),
+  setTenantContext: jest.fn(),
+  clearTenantContext: jest.fn()
 };
 
 // Create properly typed global mock objects

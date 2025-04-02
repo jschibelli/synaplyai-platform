@@ -1,34 +1,20 @@
-/**
- * Represents a versioned operation that includes timestamp and user metadata
- */
-export interface VersionedOperation {
-  // Core properties
-  id?: string;
-  userId?: string;
-  clientId?: string;
-  documentId?: string;
-  timestamp: number;
-  
-  // Direct operation fields (old style)
-  type?: 'insert' | 'delete' | 'replace' | 'format' | 'move';
-  position?: number;
-  length?: number;
-  text?: string;
-  format?: Record<string, any>;
-  
-  // Nested operation (new style)
-  operation?: {
-    type: string;
-    position: number;
-    content?: string;
-    length?: number;
-    attributes?: Record<string, any>;
-    [key: string]: any;
-  };
-  
-  // Vector clock
-  vectorClock: Record<string, number>;
+// Update this file to align with the definition in document-events.ts
+
+import { DocumentEvent, VersionedOperation as BaseVersionedOperation } from '../types/document-events';
+
+// Re-export the VersionedOperation from document-events.ts to ensure consistency
+export type VersionedOperation = BaseVersionedOperation;
+
+// Additional types specific to collaboration can be defined here
+export interface CollaborationSession {
+  documentId: string;
+  participants: string[];
+  active: boolean;
+  startTime: number;
+  lastActivity: number;
 }
+
+// Other collaboration-specific types...
 
 /**
  * Result of conflict detection between operations

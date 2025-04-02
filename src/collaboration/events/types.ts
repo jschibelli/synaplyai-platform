@@ -1,3 +1,5 @@
+import { DocumentOperation, StructuredOperation } from '../../types/document-events';
+
 /**
  * Base event interface for document operations
  */
@@ -109,3 +111,28 @@ export interface MetadataUpdatedEvent extends DocumentEvent {
   value: any;
   previousValue?: any;
 }
+
+// Make sure this definition aligns with the one in document-events.ts
+export interface DocumentEvent {
+  id: string;
+  documentId: string;
+  userId: string;
+  operation: StructuredOperation;  // Using the specific structured operation type for collaboration
+  timestamp: number;
+  version: number;
+  position?: number;
+  type?: string;
+  metadata?: Record<string, any>;
+  vectorClock?: Record<string, number>; // Add vectorClock support
+}
+
+// Additional collaboration-specific types
+export interface CollaborationEvent {
+  type: string;
+  documentId: string;
+  userId: string;
+  timestamp: number;
+  data: any;
+}
+
+// Other types specific to collaboration can be defined here
