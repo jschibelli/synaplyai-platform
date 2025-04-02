@@ -1,57 +1,13 @@
 import 'jest-environment-jsdom';
 import { CircuitState } from './src/lib/circuit-breaker';
-// Fix: Import just createCircuitBreakerMock since MockCircuitBreaker doesn't exist
-import { MockCircuitBreaker, createCircuitBreakerMock, circuitBreakerMock } from './__mocks__/circuit-breaker.mock';
-import { createMetricsCollectorMock } from './src/__mocks__/metrics-collector.mock';
-import { getTenantContextMock, setTenantContextMock, clearTenantContextMock } from './src/__mocks__/tenant-context.mock';
+import { createCircuitBreakerMock, circuitBreakerMock, MockCircuitBreaker } from './__mocks__/circuit-breaker.mock';
+import { createMetricsCollectorMock, metricsCollectorMock, MetricsCollectorMock } from './__mocks__/metrics-collector.mock';
+import { getTenantContextMock, setTenantContextMock, clearTenantContextMock } from './__mocks__/tenant-context.mock';
 import prisma from './__mocks__/prisma.mock';
 
-// Define interfaces first for better TypeScript support
-interface MockMetricsCollector {
-  metrics: any;
-  redisClient: any;
-  increment: jest.Mock;
-  recordLatency: jest.Mock;
-  incrementCounter: jest.Mock;
-  decrementCounter: jest.Mock;
-  getCounter: jest.Mock;
-  recordValue: jest.Mock;
-  getAverageValue: jest.Mock;
-  getCountValue: jest.Mock;
-  formatKey: jest.Mock;
-  track: jest.Mock;
-  setCircuitBreakerState: jest.Mock;
-  getCircuitBreakerState: jest.Mock;
-  incrementCircuitBreakerFailures: jest.Mock;
-  incrementCircuitBreakerRejections: jest.Mock;
-  getFilterResultCounts: jest.Mock;
-  getPercentileLatency: jest.Mock;
-  getPipelineLatency: jest.Mock;
-}
-
-// First define helper functions
-function createMockMetricsCollector() {
-  return {
-    metrics: {},
-    redisClient: {} as any,
-    increment: jest.fn().mockResolvedValue(undefined),
-    recordLatency: jest.fn().mockResolvedValue(undefined),
-    incrementCounter: jest.fn().mockResolvedValue(undefined),
-    decrementCounter: jest.fn().mockResolvedValue(undefined),
-    getCounter: jest.fn().mockResolvedValue(0),
-    recordValue: jest.fn().mockResolvedValue(undefined),
-    getAverageValue: jest.fn().mockResolvedValue(0),
-    getCountValue: jest.fn().mockResolvedValue(0),
-    formatKey: jest.fn().mockReturnValue('formatted-key'),
-    track: jest.fn().mockResolvedValue(undefined),
-    setCircuitBreakerState: jest.fn().mockResolvedValue(undefined),
-    getCircuitBreakerState: jest.fn().mockResolvedValue('CLOSED'),
-    incrementCircuitBreakerFailures: jest.fn().mockResolvedValue(undefined),
-    incrementCircuitBreakerRejections: jest.fn().mockResolvedValue(undefined),
-    getFilterResultCounts: jest.fn().mockResolvedValue({}),
-    getPercentileLatency: jest.fn().mockResolvedValue(0),
-    getPipelineLatency: jest.fn().mockResolvedValue(0)
-  };
+// Helper functions
+function createMockMetricsCollector(props?: any): MetricsCollectorMock {
+  return createMetricsCollectorMock();
 }
 
 function createTestConflict(props: any = {}) {
@@ -123,40 +79,55 @@ class MockWebSocket {
   }
 }
 
-// Create mock instances - use the factory
+// Create mock instances
 const mockMetricsCollector = createMockMetricsCollector();
-const mockCircuitBreaker = createCircuitBreakerMock();
-export const metricsCollectorMock = createMetricsCollectorMock();
+const mockCircuitBreaker = createCircuitBreakerMock() as MockCircuitBreaker;
 
-// Define global types - no longer using typeof references to avoid circular references
+// Define global types
 declare global {
-  var mockMetricsCollector: MockMetricsCollector;
+  var mockMetricsCollector: MetricsCollectorMock;
   var mockCircuitBreaker: MockCircuitBreaker;
-  var createMockMetricsCollector: (props?: any) => MockMetricsCollector;
+  var createMockMetricsCollector: (props?: any) => MetricsCollectorMock;
   var createTestConflict: (props?: any) => any;
   var createMockDocument: (props?: any) => any;
   var MockWebSocket: new () => any;
 }
 
-// Set up globals without type assertions that cause issues
-global.mockMetricsCollector = mockMetricsCollector;
-global.mockCircuitBreaker = mockCircuitBreaker;
-
-// Register helpers as global functions
+// Set up globals
+global.mockMetricsCollector = metricsCollectorMock;
+global.mockCircuitBreaker = circuitBreakerMock;
 global.createMockMetricsCollector = createMockMetricsCollector;
 global.createTestConflict = createTestConflict;
 global.createMockDocument = createMockDocument;
 global.MockWebSocket = MockWebSocket;
 
-// Mock PrismaClient with prisma mock
+// Export for direct imports
+export {
+  createTestConflict,
+  createMockDocument,
+  MockWebSocket,
+  createMockMetricsCollector  // This was missing but is now added
+};
+
+// Set up global mocks
+jest.mock('./src/lib/circuit-breaker', () => ({
+  CircuitBreaker: createCircuitBreakerMock,
+  CircuitState: {
+    OPEN: 'OPEN',
+    CLOSED: 'CLOSED',
+    HALF_OPEN: 'HALF_OPEN'
+  }
+}));
+
+jest.mock('./src/metrics/metrics-collector', () => ({
+  MetricsCollector: createMetricsCollectorMock,
+  default: metricsCollectorMock
+}));
+
+// Mock PrismaClient
 jest.mock('@prisma/client', () => ({
   PrismaClient: jest.fn(() => prisma)
 }));
 
-// Need this export for direct imports in test files
-export {
-  createMockMetricsCollector,
-  createTestConflict,
-  createMockDocument,
-  MockWebSocket
-};
+// Suppress console errors during tests
+global.console.error = jest.fn();

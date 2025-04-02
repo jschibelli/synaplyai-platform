@@ -10,6 +10,20 @@ const mockMetricsCollector = {
   getPercentileLatency: jest.fn()
 };
 
+// Fix the variants declaration to use objects instead of strings
+const testExperiment = {
+  id: 'test-experiment',
+  variants: [
+    { id: 'model-baseline', name: 'Model Baseline' },
+    { id: 'model-fine-tuned', name: 'Fine-tuned Model' }
+  ],
+  metrics: ['ACCEPTANCE_RATE', 'RESPONSE_TIME'],
+  distribution: {
+    'model-baseline': 0.5,
+    'model-fine-tuned': 0.5
+  }
+};
+
 describe('ABTestingFramework', () => {
   let abTesting: ABTestingFramework;
   

@@ -4,6 +4,7 @@ import { Operation } from '../../../src/collaboration/conflict/OperationalTransf
 import { MetricsCollector } from '../../../src/metrics/collector';
 import { DocumentEvent } from '../../../src/collaboration/events/types';
 import { VersionedOperation, ConflictDetectionResult } from '../../../src/collaboration/types';
+import { toDocumentEvent } from '../../../src/types/document-events';
 
 // Mock dependencies
 jest.mock('../../../src/metrics/collector');
@@ -12,6 +13,17 @@ jest.mock('../../../src/compliance/logger', () => ({
     log: jest.fn().mockResolvedValue(undefined)
   }
 }));
+
+// Add the missing properties to match the interface
+interface VersionedOperation {
+  operation: any;
+  vectorClock: Record<string, number>;
+  clientId: string;
+  timestamp: number;
+  documentId: string; // Add this
+  userId: string;     // Add this
+  version: number;    // Add this
+}
 
 describe('ConflictDetector', () => {
   let conflictDetector: ConflictDetector;
@@ -45,17 +57,26 @@ describe('ConflictDetector', () => {
         position: 0,
         text: 'Hello',
         timestamp: Date.now() - 1000,
-        vectorClock: clock1.toRecord()
+        vectorClock: clock1.toRecord(),
+        documentId: 'doc-1',  // Add this
+        userId: 'user-1',     // Add this
+        version: 1            // Add this
       };
       
       const op2: VersionedOperation = {
         operation: { type: 'insert', position: 5, content: ' world' },
         vectorClock: clock2.toRecord(), // Use toRecord() to convert
         clientId: 'client2',
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        documentId: 'doc-1',  // Add this
+        userId: 'user-1',     // Add this
+        version: 1            // Add this
       };
       
-      const result = await conflictDetector.detectConflict(op1, op2);
+      const result = await conflictDetector.detectConflict(
+        toDocumentEvent(op1), 
+        toDocumentEvent(op2)
+      );
       
       // Add null assertion to ensure TypeScript knows result is not null
       expect(result!.hasConflict).toBe(false);
@@ -78,17 +99,26 @@ describe('ConflictDetector', () => {
         operation: { type: 'insert', position: 5, content: 'Hello' },
         vectorClock: clock1.toRecord(), // Use toRecord() to convert
         clientId: 'client1',
-        timestamp: Date.now() - 1000
+        timestamp: Date.now() - 1000,
+        documentId: 'doc-1',  // Add this
+        userId: 'user-1',     // Add this
+        version: 1            // Add this
       };
       
       const op2: VersionedOperation = {
         operation: { type: 'insert', position: 5, content: 'World' },
         vectorClock: clock2.toRecord(), // Use toRecord() to convert
         clientId: 'client2',
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        documentId: 'doc-1',  // Add this
+        userId: 'user-1',     // Add this
+        version: 1            // Add this
       };
       
-      const result = await conflictDetector.detectConflict(op1, op2);
+      const result = await conflictDetector.detectConflict(
+        toDocumentEvent(op1), 
+        toDocumentEvent(op2)
+      );
       
       expect(result!.hasConflict).toBe(true);
       expect(result!.relationship).toBe('concurrent');
@@ -110,7 +140,10 @@ describe('ConflictDetector', () => {
         },
         vectorClock: clock1.toRecord(), // Use toRecord() to convert
         clientId: 'client1',
-        timestamp: Date.now() - 1000
+        timestamp: Date.now() - 1000,
+        documentId: 'doc-1',  // Add this
+        userId: 'user-1',     // Add this
+        version: 1            // Add this
       };
       
       const op2: VersionedOperation = {
@@ -122,10 +155,16 @@ describe('ConflictDetector', () => {
         },
         vectorClock: clock2.toRecord(), // Use toRecord() to convert
         clientId: 'client2',
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        documentId: 'doc-1',  // Add this
+        userId: 'user-1',     // Add this
+        version: 1            // Add this
       };
       
-      const result = await conflictDetector.detectConflict(op1, op2);
+      const result = await conflictDetector.detectConflict(
+        toDocumentEvent(op1), 
+        toDocumentEvent(op2)
+      );
       
       expect(result!.hasConflict).toBe(true);
       expect(result!.relationship).toBe('concurrent');
@@ -147,7 +186,10 @@ describe('ConflictDetector', () => {
         },
         vectorClock: clock1.toRecord(), // Use toRecord() to convert
         clientId: 'client1',
-        timestamp: Date.now() - 1000
+        timestamp: Date.now() - 1000,
+        documentId: 'doc-1',  // Add this
+        userId: 'user-1',     // Add this
+        version: 1            // Add this
       };
       
       const op2: VersionedOperation = {
@@ -159,10 +201,16 @@ describe('ConflictDetector', () => {
         },
         vectorClock: clock2.toRecord(), // Use toRecord() to convert
         clientId: 'client2',
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        documentId: 'doc-1',  // Add this
+        userId: 'user-1',     // Add this
+        version: 1            // Add this
       };
       
-      const result = await conflictDetector.detectConflict(op1, op2);
+      const result = await conflictDetector.detectConflict(
+        toDocumentEvent(op1), 
+        toDocumentEvent(op2)
+      );
       
       expect(result!.hasConflict).toBe(false);
       expect(result!.relationship).toBe('concurrent');
@@ -182,7 +230,10 @@ describe('ConflictDetector', () => {
         },
         vectorClock: clock1.toRecord(), // Use toRecord() to convert
         clientId: 'client1',
-        timestamp: Date.now() - 1000
+        timestamp: Date.now() - 1000,
+        documentId: 'doc-1',  // Add this
+        userId: 'user-1',     // Add this
+        version: 1            // Add this
       };
       
       const op2: VersionedOperation = {
@@ -193,10 +244,16 @@ describe('ConflictDetector', () => {
         },
         vectorClock: clock2.toRecord(), // Use toRecord() to convert
         clientId: 'client2',
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        documentId: 'doc-1',  // Add this
+        userId: 'user-1',     // Add this
+        version: 1            // Add this
       };
       
-      const result = await conflictDetector.detectConflict(op1, op2);
+      const result = await conflictDetector.detectConflict(
+        toDocumentEvent(op1), 
+        toDocumentEvent(op2)
+      );
       
       expect(result!.hasConflict).toBe(true);
       expect(result!.relationship).toBe('concurrent');
@@ -217,7 +274,10 @@ describe('ConflictDetector', () => {
         },
         vectorClock: clock1.toRecord(), // Use toRecord() to convert
         clientId: 'client1',
-        timestamp: Date.now() - 1000
+        timestamp: Date.now() - 1000,
+        documentId: 'doc-1',  // Add this
+        userId: 'user-1',     // Add this
+        version: 1            // Add this
       };
       
       const op2: VersionedOperation = {
@@ -228,10 +288,16 @@ describe('ConflictDetector', () => {
         },
         vectorClock: clock2.toRecord(), // Use toRecord() to convert
         clientId: 'client2',
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        documentId: 'doc-1',  // Add this
+        userId: 'user-1',     // Add this
+        version: 1            // Add this
       };
       
-      const result = await conflictDetector.detectConflict(op1, op2);
+      const result = await conflictDetector.detectConflict(
+        toDocumentEvent(op1), 
+        toDocumentEvent(op2)
+      );
       
       expect(result!.hasConflict).toBe(false);
       expect(result!.relationship).toBe('concurrent');
@@ -251,7 +317,10 @@ describe('ConflictDetector', () => {
         },
         vectorClock: clock1.toRecord(), // Use toRecord() to convert
         clientId: 'client1', // Same client
-        timestamp: Date.now() - 1000
+        timestamp: Date.now() - 1000,
+        documentId: 'doc-1',  // Add this
+        userId: 'user-1',     // Add this
+        version: 1            // Add this
       };
       
       const op2: VersionedOperation = {
@@ -262,11 +331,17 @@ describe('ConflictDetector', () => {
         },
         vectorClock: clock2.toRecord(), // Use toRecord() to convert
         clientId: 'client1', // Same client
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        documentId: 'doc-1',  // Add this
+        userId: 'user-1',     // Add this
+        version: 1            // Add this
       };
       
       // This should detect the relationship as "after" due to the vector clock
-      const result = await conflictDetector.detectConflict(op1, op2);
+      const result = await conflictDetector.detectConflict(
+        toDocumentEvent(op1), 
+        toDocumentEvent(op2)
+      );
       
       expect(result!.hasConflict).toBe(false);
       expect(result!.relationship).toBe('after');

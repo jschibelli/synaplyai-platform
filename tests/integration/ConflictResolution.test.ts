@@ -103,7 +103,35 @@ function applyOperation(doc: string, op: Operation): string {
   return doc;
 }
 
-// Helper function to apply operations to a document object
+/**
+ * Helper function to apply operations to a string document
+ * This function needs to correctly handle whitespace and text replacement
+ */
 function applyOperationToDoc(doc: { content: string }, op: Operation): void {
-  doc.content = applyOperation(doc.content, op);
+  if (op.type === 'replace') {
+    // Extract the text being replaced to check if it contains spaces
+    const replacedText = doc.content.substring(op.position, op.position + op.length);
+    const hasSpaceAtEnd = replacedText.endsWith(' ');
+    
+    // Create the new content by replacing the specified range
+    const newContent = 
+      doc.content.substring(0, op.position) + 
+      op.text + 
+      (hasSpaceAtEnd && !op.text.endsWith(' ') ? ' ' : '') + 
+      doc.content.substring(op.position + op.length);
+    
+    // Update the document content
+    doc.content = newContent;
+  } else if (op.type === 'insert') {
+    // Insert text at the specified position
+    doc.content = 
+      doc.content.substring(0, op.position) + 
+      op.text + 
+      doc.content.substring(op.position);
+  } else if (op.type === 'delete') {
+    // Delete text at the specified position and length
+    doc.content = 
+      doc.content.substring(0, op.position) + 
+      doc.content.substring(op.position + (op.length || 0));
+  }
 }

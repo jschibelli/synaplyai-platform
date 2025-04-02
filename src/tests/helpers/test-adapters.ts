@@ -1,5 +1,6 @@
 import { Conflict, ConflictType, ConflictResolution, ConflictResolutionStrategy } from '../../collaboration/conflict/types';
 import { BaseEvent, DocumentEvent } from '../../collaboration/events/types';
+export { createTestConflict, createMockDocument } from '../../../jest.setup-mocks';
 
 /**
  * Converts test conflict objects to TypeScript interface format
@@ -44,22 +45,9 @@ function convertToDocumentEvent(event: any): DocumentEvent {
   } as DocumentEvent;
 }
 
-// Create this file to fix missing import error
-
-export function createTestConflict(props = {}) {
-  return {
-    id: props.id || 'conflict-1',
-    documentId: props.documentId || 'doc-1',
-    type: props.type || 'TEXT_EDIT',
-    local: props.local || {},
-    remote: props.remote || {},
-    localContent: props.localContent || 'Local content',
-    remoteContent: props.remoteContent || 'Remote content',
-    userId: props.userId || 'test-user',
-    createdAt: props.createdAt || new Date(),
-    resolvedAt: props.resolvedAt,
-    resolution: props.resolution
-  };
-}
+// This file implements test helpers for adapter functions
 
 // Add other test helpers as needed
+
+// Export the existing function
+export { convertToDocumentEvent };

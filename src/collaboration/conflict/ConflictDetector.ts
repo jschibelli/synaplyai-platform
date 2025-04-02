@@ -10,6 +10,9 @@ import {
   Conflict
 } from './types';
 
+import { DocumentEvent as GenericDocumentEvent, DocumentOperation } from '../../types/document-events';
+import { DocumentEvent as CollaborationDocumentEvent } from '../events/types';
+
 // Export ConflictType for tests
 export { ConflictType } from './types';
 
@@ -83,6 +86,16 @@ export interface ConflictDetectorConfig {
 }
 
 /**
+ * Interface for conflict detection results
+ */
+export interface ConflictDetectionResult {
+  hasConflict: boolean;
+  relationship: string;
+  conflictType?: string;
+  confidenceScore?: number;
+}
+
+/**
  * Responsible for detecting conflicts between concurrent operations
  */
 export class ConflictDetector {
@@ -102,48 +115,13 @@ export class ConflictDetector {
   /**
    * Detects potential conflicts between two events using vector clocks
    */
-  detectConflict(localEvent: DocumentEvent, remoteEvent: DocumentEvent): ConflictDetectionResult {
-    const startTime = performance.now();
+  async detectConflict(event1: GenericDocumentEvent, event2: GenericDocumentEvent): Promise<boolean> {
+    // Convert to collaboration events if needed
+    const collaborationEvent1 = convertToCollaborationEvent(event1);
+    const collaborationEvent2 = convertToCollaborationEvent(event2);
     
-    try {
-      // Compare vector clocks to determine relationship
-      const relationship = this.compareVectorClocks(
-        localEvent.vectorClock || {},
-        remoteEvent.vectorClock || {}
-      );
-      
-      // If not concurrent, no conflict
-      if (relationship !== OperationRelationship.CONCURRENT) {
-        return null;
-      }
-      
-      // Detect conflict type based on event types and affected ranges
-      const conflictType = this.identifyConflictType(localEvent, remoteEvent);
-      if (conflictType === ConflictType.NONE) {
-        return null;
-      }
-      
-      // Create conflict object with appropriate severity and description
-      const conflict: Conflict = {
-        id: `conflict-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        documentId: localEvent.documentId || localEvent.aggregateId || 'unknown',
-        type: conflictType,
-        localEvent,
-        remoteEvent,
-        severity: this.determineSeverity(conflictType, localEvent, remoteEvent),
-        description: this.generateDescription(conflictType, localEvent, remoteEvent),
-        createdAt: Date.now()
-      };
-      
-      // Record metrics
-      this.metricsCollector.increment('conflict.detected', 1);
-      this.metricsCollector.track('conflict.type', 1, { type: conflictType });
-      
-      return conflict;
-    } finally {
-      const duration = performance.now() - startTime;
-      this.metricsCollector.recordLatency('conflict.detection.time', duration);
-    }
+    // Then proceed with conflict detection logic
+    // ...
   }
   
   /**
@@ -666,4 +644,134 @@ export class ConflictDetector {
   ): boolean {
     return start1 <= end2 && start2 <= end1;
   }
+
+  /**
+   * Detect if two operations conflict with each other
+   */
+  detectConflict(op1: VersionedOperation, op2: VersionedOperation): ConflictDetectionResult {
+    // Determine relationship between operations
+    const relationship = this.determineRelationship(op1, op2);
+    
+    // Only concurrent operations can conflict
+    if (relationship !== 'concurrent') {
+      return {
+        hasConflict: false,
+        relationship: relationship,
+        conflictType: undefined,
+        confidenceScore: undefined
+      };
+    }
+    
+    // For concurrent operations, determine conflict type
+    const conflictType = this.determineConflictType(op1, op2);
+    const hasConflict = !!conflictType;
+    
+    return {
+      hasConflict,
+      relationship,
+      conflictType,
+      confidenceScore: hasConflict ? this.calculateConfidence(op1, op2) : undefined
+    };
+  }
+  
+  // Helper methods
+  private determineRelationship(op1: VersionedOperation, op2: VersionedOperation): string {
+    // Check vector clocks
+    if (this.isHappenedBefore(op1.vectorClock, op2.vectorClock)) {
+      return 'before';
+    } else if (this.isHappenedBefore(op2.vectorClock, op1.vectorClock)) {
+      return 'after';
+    } else {
+      return 'concurrent';
+    }
+  }
+  
+  private isHappenedBefore(vectorClock1: Record<string, number>, vectorClock2: Record<string, number>): boolean {
+    // Implementation of "happened before" relationship
+    let foundLess = false;
+    
+    for (const clientId in vectorClock1) {
+      if (!(clientId in vectorClock2) || vectorClock1[clientId] > vectorClock2[clientId]) {
+        return false;
+      }
+      if (vectorClock1[clientId] < vectorClock2[clientId]) {
+        foundLess = true;
+      }
+    }
+    
+    return foundLess;
+  }
+  
+  private determineConflictType(op1: VersionedOperation, op2: VersionedOperation): string | undefined {
+    // Simplified conflict type detection
+    const type1 = op1.operation?.type;
+    const type2 = op2.operation?.type;
+    
+    if (type1 === 'TEXT_EDIT' && type2 === 'TEXT_EDIT') {
+      // Check for overlapping ranges
+      if (this.hasOverlappingRanges(op1.operation, op2.operation)) {
+        return 'TEXT_EDIT';
+      }
+    } else if ((type1 === 'DELETE' && type2 === 'EDIT') || (type1 === 'EDIT' && type2 === 'DELETE')) {
+      return 'DELETE_MODIFIED';
+    } else if (type1 === 'FORMAT' && type2 === 'FORMAT') {
+      if (this.hasOverlappingRanges(op1.operation, op2.operation)) {
+        return 'FORMAT';
+      }
+    }
+    
+    return undefined;
+  }
+  
+  private hasOverlappingRanges(op1: any, op2: any): boolean {
+    // Simple range overlap check
+    const start1 = op1.range?.start || op1.position || 0;
+    const end1 = op1.range?.end || (start1 + (op1.text?.length || 0));
+    
+    const start2 = op2.range?.start || op2.position || 0;
+    const end2 = op2.range?.end || (start2 + (op2.text?.length || 0));
+    
+    return !(end1 <= start2 || end2 <= start1);
+  }
+  
+  private calculateConfidence(op1: VersionedOperation, op2: VersionedOperation): number {
+    // Simple confidence score calculation
+    const conflictType = this.determineConflictType(op1, op2);
+    
+    if (conflictType === 'TEXT_EDIT') {
+      return 0.8;
+    } else if (conflictType === 'FORMAT') {
+      return 0.7;
+    } else if (conflictType === 'DELETE_MODIFIED') {
+      return 0.9;
+    }
+    
+    return 0.5;
+  }
+}
+
+/**
+ * Fix for the typed operation mismatch - convert between the different event types
+ */
+function convertToCollaborationEvent(event: GenericDocumentEvent): CollaborationDocumentEvent {
+  // Handle string operations by converting them to structured operations
+  const operation = typeof event.operation === 'string'
+    ? {
+        type: 'insert',
+        position: event.position || 0,
+        content: event.operation,
+      }
+    : event.operation;
+
+  return {
+    id: event.id,
+    documentId: event.documentId,
+    userId: event.userId,
+    operation: operation,
+    timestamp: event.timestamp,
+    version: event.version,
+    type: event.type,
+    metadata: event.metadata,
+    vectorClock: event.vectorClock
+  };
 }

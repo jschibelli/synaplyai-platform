@@ -1,65 +1,77 @@
 /**
- * Parameters for gathering context for AI commands
+ * Parameters for controlling AI command context
  */
 export interface AICommandContextParameters {
+  // Required properties
   windowSize: number;
   includePreceding: boolean;
   includeFollowing: boolean;
-  includeDocument: boolean;
-  includeMetadata?: boolean;
-  detectIntent?: boolean;
-  fallbackToPartialContext?: boolean;
+  includeDocument: boolean;  // <-- This is the missing property in many tests
+  
+  // Optional properties
   position?: number;
-  [key: string]: any;
+  selectionStart?: number;
+  selectionEnd?: number;
+  includeMetadata?: boolean;
 }
 
 /**
- * Context data structure for AI commands
+ * Default parameters for AI command context
+ */
+export const defaultAICommandContextParameters: AICommandContextParameters = {
+  windowSize: 100,
+  includePreceding: true,
+  includeFollowing: true,
+  includeDocument: true  // <-- Make sure this is set in the default
+};
+
+/**
+ * Context for AI commands
  */
 export interface AICommandContext {
   documentId: string;
   userId: string;
-  tenantId: string;
+  tenantId?: string;
   document?: {
     content: string;
-    metadata?: any;
+    metadata?: Record<string, any>;
   };
-  selection?: {
-    start: number;
-    end: number;
-    text: string;
-  };
-  aiAnalysisResult?: any;
-  selectedText?: string;
+  analysis?: any;
   precedingText?: string;
   followingText?: string;
-  documentMetadata?: any;
-  onProgress?: (update: string) => void;
-  onToken?: (token: any) => void;
-  [key: string]: any;
-}
-
-/**
- * Parameters for AI analysis
- */
-export interface AIAnalysisParameters {
-  model?: string;
-  temperature?: number;
-  maxTokens?: number;
-  prompt?: string;
-  systemPrompt?: string;
-  includeMetadata?: boolean;
+  selectedText?: string;
   onToken?: (token: string) => void;
-  [key: string]: any; // Allow additional properties for tests
+  onProgress?: (progress: number) => void;
 }
 
 /**
- * Default context parameters
+ * Default context for AI commands
  */
-export const defaultContextParameters: AICommandContextParameters = {
-  windowSize: 1000,
-  includePreceding: true,
-  includeFollowing: true,
-  includeDocument: true,
-  includeMetadata: false
+export const defaultAICommandContext: AICommandContext = {
+  documentId: 'doc-1',
+  userId: 'user-1',
+  tenantId: 'tenant-1',
+  document: {
+    content: 'test content',
+    metadata: {}
+  }
 };
+
+/**
+ * Represents the base document context
+ */
+export interface DocumentContext extends Partial<AICommandContext> {
+  documentId: string;
+}
+
+/**
+ * Function to convert a DocumentContext to an AICommandContext
+ */
+export function toAICommandContext(context: DocumentContext): AICommandContext {
+  return {
+    documentId: context.documentId,
+    userId: context.userId || 'anonymous',
+    tenantId: context.tenantId || 'default',
+    ...context
+  };
+}

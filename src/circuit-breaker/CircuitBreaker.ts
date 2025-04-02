@@ -7,9 +7,10 @@ export enum CircuitState {
 }
 
 export interface CircuitBreakerOptions {
-  failureThreshold: number;
-  resetTimeout: number;
-  successThreshold?: number;
+  failureThreshold?: number;
+  resetTimeout?: number;
+  halfOpenSuccessThreshold?: number;
+  name?: string;
 }
 
 export interface CircuitBreakerStore {
@@ -24,70 +25,104 @@ export interface CircuitBreakerStore {
   decrementCounter(key: string, tags?: Record<string, string>): Promise<number>;
 }
 
-export class CircuitBreaker {
-  public state: CircuitState = CircuitState.CLOSED;
-  public failureCount: number = 0;
-  public successCount: number = 0;
-  public lastStateChange: number = Date.now();
-  public serviceName: string;
+export interface CircuitBreakerInterface {
+  execute<T>(fn: () => Promise<T>): Promise<T>;
+  getState(): CircuitState;
+  recordSuccess(): void;
+  recordFailure(): void;
+  transitionState(newState: CircuitState): void;
+  shouldAttemptReset(): boolean;
+}
+
+export class CircuitBreaker implements CircuitBreakerInterface {
+  private state: CircuitState = CircuitState.CLOSED;
+  private failureCount: number = 0;
+  private successCount: number = 0;
+  private lastStateChangeTime: number = Date.now();
+  private readonly failureThreshold: number;
+  private readonly resetTimeout: number;
+  private readonly halfOpenSuccessThreshold: number;
+  private readonly name: string;
   
-  private options: CircuitBreakerOptions;
   private stateRepository: CircuitBreakerStore;
   private metricsCollector?: MetricsCollector;
 
   constructor(
-    serviceName: string, 
-    options: CircuitBreakerOptions, 
+    options: CircuitBreakerOptions = {},
     stateRepository: CircuitBreakerStore,
     metricsCollector?: MetricsCollector
   ) {
-    this.serviceName = serviceName;
-    this.options = {
-      failureThreshold: options.failureThreshold,
-      resetTimeout: options.resetTimeout,
-      successThreshold: options.successThreshold || 1
-    };
+    this.failureThreshold = options.failureThreshold || 5;
+    this.resetTimeout = options.resetTimeout || 30000; // 30 seconds
+    this.halfOpenSuccessThreshold = options.halfOpenSuccessThreshold || 3;
+    this.name = options.name || 'default';
     this.stateRepository = stateRepository;
     this.metricsCollector = metricsCollector;
   }
 
-  /**
-   * Execute a function with circuit breaker protection
-   */
   async execute<T>(fn: () => Promise<T>): Promise<T> {
-    const currentState = await this.getState();
-    
-    if (currentState === CircuitState.OPEN) {
-      const lastChange = await this.getLastStateChange();
-      
-      if (lastChange && Date.now() - lastChange.getTime() > this.options.resetTimeout) {
-        await this.transitionToState(CircuitState.HALF_OPEN);
+    if (this.state === CircuitState.OPEN) {
+      if (this.shouldAttemptReset()) {
+        this.transitionState(CircuitState.HALF_OPEN);
       } else {
-        if (this.metricsCollector) {
-          await this.metricsCollector.track('circuit_breaker.rejected', {
-            service: this.serviceName,
-            state: currentState
-          });
-        }
-        throw new Error(`Circuit breaker is open for ${this.serviceName}`);
+        throw new Error(`Circuit breaker (${this.name}) is open`);
       }
     }
-    
+
     try {
       const result = await fn();
-      await this.recordSuccess();
+      this.recordSuccess();
       return result;
     } catch (error) {
-      await this.recordFailure();
+      this.recordFailure();
       throw error;
     }
+  }
+
+  getState(): CircuitState {
+    return this.state;
+  }
+
+  recordSuccess(): void {
+    if (this.state === CircuitState.HALF_OPEN) {
+      this.successCount++;
+      if (this.successCount >= this.halfOpenSuccessThreshold) {
+        this.transitionState(CircuitState.CLOSED);
+      }
+    }
+  }
+
+  recordFailure(): void {
+    if (this.state === CircuitState.CLOSED) {
+      this.failureCount++;
+      if (this.failureCount >= this.failureThreshold) {
+        this.transitionState(CircuitState.OPEN);
+      }
+    } else if (this.state === CircuitState.HALF_OPEN) {
+      this.transitionState(CircuitState.OPEN);
+    }
+  }
+
+  transitionState(newState: CircuitState): void {
+    this.state = newState;
+    this.lastStateChangeTime = Date.now();
+    
+    if (newState === CircuitState.CLOSED) {
+      this.failureCount = 0;
+    } else if (newState === CircuitState.HALF_OPEN) {
+      this.successCount = 0;
+    }
+  }
+
+  shouldAttemptReset(): boolean {
+    return Date.now() - this.lastStateChangeTime > this.resetTimeout;
   }
 
   /**
    * Execute a function with bulkhead protection (concurrency limiting)
    */
   async executeWithBulkhead<T>(fn: () => Promise<T>, concurrencyLimit: number): Promise<T> {
-    const counterKey = `bulkhead:${this.serviceName}`;
+    const counterKey = `bulkhead:${this.name}`;
     
     try {
       const currentCount = await this.stateRepository.incrementCounter(counterKey);
@@ -97,7 +132,7 @@ export class CircuitBreaker {
         
         if (this.metricsCollector) {
           await this.metricsCollector.track('bulkhead.rejected', {
-            service: this.serviceName,
+            service: this.name,
             limit: concurrencyLimit.toString()
           });
         }
@@ -119,98 +154,11 @@ export class CircuitBreaker {
   }
 
   /**
-   * Transition to a new circuit state
-   */
-  async transitionToState(newState: CircuitState): Promise<void> {
-    if (this.state === newState) return;
-    
-    this.state = newState;
-    await this.stateRepository.setState(this.serviceName, newState);
-    await this.stateRepository.setLastStateChange(this.serviceName, new Date());
-    
-    if (newState === CircuitState.CLOSED || newState === CircuitState.HALF_OPEN) {
-      await this.stateRepository.resetCounters(this.serviceName);
-      this.failureCount = 0;
-      this.successCount = 0;
-    }
-    
-    if (this.metricsCollector) {
-      await this.metricsCollector.track('circuit_breaker.state_changed', {
-        service: this.serviceName,
-        state: newState
-      });
-    }
-  }
-
-  /**
-   * Get the current circuit state
-   */
-  async getState(): Promise<CircuitState> {
-    const state = await this.stateRepository.getState(this.serviceName);
-    this.state = state;
-    return state;
-  }
-
-  /**
-   * Record a successful operation
-   */
-  async recordSuccess(): Promise<void> {
-    if (this.state === CircuitState.HALF_OPEN) {
-      const successes = await this.stateRepository.incrementSuccesses(this.serviceName);
-      this.successCount = successes;
-      
-      if (successes >= this.options.successThreshold!) {
-        await this.transitionToState(CircuitState.CLOSED);
-      }
-    }
-    
-    if (this.metricsCollector) {
-      await this.metricsCollector.track('circuit_breaker.success', {
-        service: this.serviceName,
-        state: this.state
-      });
-    }
-  }
-
-  /**
-   * Record a failed operation
-   */
-  async recordFailure(): Promise<void> {
-    if (this.state === CircuitState.CLOSED) {
-      const failures = await this.stateRepository.incrementFailures(this.serviceName);
-      this.failureCount = failures;
-      
-      if (failures >= this.options.failureThreshold) {
-        await this.transitionToState(CircuitState.OPEN);
-      }
-    } else if (this.state === CircuitState.HALF_OPEN) {
-      await this.transitionToState(CircuitState.OPEN);
-    }
-    
-    if (this.metricsCollector) {
-      await this.metricsCollector.track('circuit_breaker.failure', {
-        service: this.serviceName,
-        state: this.state
-      });
-    }
-  }
-
-  /**
-   * Check if the circuit should attempt to reset
-   */
-  async shouldAttemptReset(): Promise<boolean> {
-    if (this.state !== CircuitState.OPEN) return false;
-    
-    const lastChange = await this.getLastStateChange();
-    if (!lastChange) return false;
-    
-    return Date.now() - lastChange.getTime() > this.options.resetTimeout;
-  }
-
-  /**
    * Get the last state change time
    */
   private async getLastStateChange(): Promise<Date | null> {
-    return this.stateRepository.getLastStateChange(this.serviceName);
+    return this.stateRepository.getLastStateChange(this.name);
   }
 }
+
+export default CircuitBreaker;

@@ -252,3 +252,6 @@ export class CommandRegistry {
     return this.schemaVersions.get(commandType);
   }
 }
+
+// Ensure we're exporting the class itself, not an instance or an object
+export default CommandRegistry;
