@@ -1,19 +1,17 @@
-import React from 'react';
-import { Token, TokenState } from './TokenStateManager';
+import React, { useState } from 'react';
+import { Token, TokenState } from '../../collaboration/tokens/TokenStateManager';
 import { useTokenState } from '../../hooks/useTokenState';
 
 interface ConflictPanelProps {
   documentId: string;
-  userId: string;
-  tenantId: string;
   onResolveAll?: () => void;
+  className?: string;
 }
 
 export const ConflictPanel: React.FC<ConflictPanelProps> = ({
   documentId,
-  userId,
-  tenantId,
-  onResolveAll
+  onResolveAll,
+  className = ''
 }) => {
   const {
     conflicts,
@@ -21,7 +19,9 @@ export const ConflictPanel: React.FC<ConflictPanelProps> = ({
     updateTokenState,
     resolveAllConflicts,
     getTokenStyle
-  } = useTokenState(documentId, userId, tenantId);
+  } = useTokenState(documentId);
+  
+  const [selectedStrategy, setSelectedStrategy] = useState<'accept-newest' | 'accept-oldest' | 'accept-local' | 'accept-remote'>('accept-newest');
   
   if (!hasConflicts) {
     return null;
@@ -35,8 +35,8 @@ export const ConflictPanel: React.FC<ConflictPanelProps> = ({
     updateTokenState(tokenId, TokenState.REJECTED);
   };
   
-  const handleResolveAll = (strategy: 'accept-newest' | 'accept-oldest' | 'accept-local' | 'accept-remote') => {
-    resolveAllConflicts(strategy);
+  const handleResolveAll = () => {
+    resolveAllConflicts(selectedStrategy);
     if (onResolveAll) {
       onResolveAll();
     }
@@ -52,7 +52,7 @@ export const ConflictPanel: React.FC<ConflictPanelProps> = ({
   });
   
   return (
-    <div className="bg-white shadow-lg rounded-lg p-4 mb-4">
+    <div className={`bg-white shadow-lg rounded-lg p-4 mb-4 ${className}`}>
       <h2 className="text-lg font-bold mb-2">Conflict Resolution</h2>
       <p className="text-sm text-gray-600 mb-4">
         {conflicts.length} {conflicts.length === 1 ? 'conflict' : 'conflicts'} detected.
@@ -66,12 +66,17 @@ export const ConflictPanel: React.FC<ConflictPanelProps> = ({
             <div className="space-y-2">
               {tokensAtPosition.map(token => (
                 <div key={token.id} className="flex items-center justify-between">
-                  <span
-                    className="py-1 px-2 rounded"
-                    style={getTokenStyle(token.id)}
-                  >
-                    {token.text}
-                  </span>
+                  <div className="flex items-center">
+                    <span className="text-xs text-gray-500 mr-2">
+                      {new Date(token.metadata.timestamp || 0).toLocaleTimeString()}
+                    </span>
+                    <span
+                      className="py-1 px-2 rounded"
+                      style={getTokenStyle(token.id)}
+                    >
+                      {token.text}
+                    </span>
+                  </div>
                   <div className="space-x-2">
                     <button
                       onClick={() => handleAcceptToken(token.id)}
@@ -95,31 +100,31 @@ export const ConflictPanel: React.FC<ConflictPanelProps> = ({
       
       <div className="mt-4 pt-4 border-t">
         <h3 className="font-medium mb-2">Resolve All Conflicts</h3>
-        <div className="flex space-x-2">
-          <button
-            onClick={() => handleResolveAll('accept-newest')}
-            className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-2 rounded text-sm"
-          >
-            Accept Newest
-          </button>
-          <button
-            onClick={() => handleResolveAll('accept-oldest')}
-            className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-2 rounded text-sm"
-          >
-            Accept Oldest
-          </button>
-          <button
-            onClick={() => handleResolveAll('accept-local')}
-            className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-2 rounded text-sm"
-          >
-            Accept Mine
-          </button>
-          <button
-            onClick={() => handleResolveAll('accept-remote')}
-            className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-2 rounded text-sm"
-          >
-            Accept Others
-          </button>
+        <div className="flex flex-col space-y-2">
+          <div className="flex space-x-2">
+            <select 
+              className="border rounded px-2 py-1 text-sm"
+              value={selectedStrategy}
+              onChange={(e) => setSelectedStrategy(e.target.value as any)}
+            >
+              <option value="accept-newest">Accept Newest</option>
+              <option value="accept-oldest">Accept Oldest</option>
+              <option value="accept-local">Accept Mine</option>
+              <option value="accept-remote">Accept Others</option>
+            </select>
+            <button
+              onClick={handleResolveAll}
+              className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-2 rounded text-sm"
+            >
+              Apply to All
+            </button>
+          </div>
+          <p className="text-xs text-gray-500">
+            {selectedStrategy === 'accept-newest' && 'Accepts the most recent changes and rejects older ones.'}
+            {selectedStrategy === 'accept-oldest' && 'Accepts the original content and rejects newer changes.'}
+            {selectedStrategy === 'accept-local' && 'Accepts your changes and rejects changes from others.'}
+            {selectedStrategy === 'accept-remote' && 'Accepts changes from others and rejects your changes.'}
+          </p>
         </div>
       </div>
     </div>
