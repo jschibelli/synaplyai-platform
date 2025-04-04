@@ -1,248 +1,196 @@
 import React, { useState, useEffect } from 'react';
-import { ConflictResolutionStrategy, ConflictType } from '../../conflicts/ConflictResolver';
-import { Token } from './Token';
-import { DiffView } from './DiffView';
-import './ConflictPanel.css';
-import { OperationalTransform, Operation } from '../../collaborative/OperationalTransform';
+import { useCollaborativeDocument } from '../../hooks/useCollaborativeDocument';
+import { Token, TokenState } from '../../collaboration/tokens/TokenStateManager';
 
 interface ConflictPanelProps {
-  conflict: {
-    id: string;
-    type: ConflictType;
-    localContent: string;
-    remoteContent: string;
-    tokens?: Array<{
-      id: string;
-      text: string;
-      state: 'ACCEPTED' | 'REJECTED' | 'CONFLICTED';
-    }>;
-  };
-  onResolve: (resolution: {
-    conflictId: string;
-    strategy: ConflictResolutionStrategy;
-    mergedContent?: string;
-  }) => void;
-  relatedSuggestions?: Array<{
-    id: string;
-    content: string;
-    state: 'CONFLICTED' | 'UPDATED';
-  }>;
+  documentId: string;
+  onResolveAll?: () => void;
+  className?: string;
 }
 
+/**
+ * A panel for resolving conflicts in collaborative editing
+ */
 export const ConflictPanel: React.FC<ConflictPanelProps> = ({
-  conflict,
-  onResolve,
-  relatedSuggestions = []
+  documentId,
+  onResolveAll,
+  className = ''
 }) => {
-  const [tokenState, setTokenState] = useState<Record<string, string>>({});
-  const [status, setStatus] = useState<string>('');
+  const {
+    conflicts,
+    tokens,
+    hasConflicts,
+    updateTokenState,
+    resolveAllConflicts,
+    getTokenStyle
+  } = useCollaborativeDocument(documentId);
   
+  const [selectedStrategy, setSelectedStrategy] = useState<'accept-newest' | 'accept-oldest' | 'accept-local' | 'accept-remote'>('accept-newest');
+  const [expandedConflicts, setExpandedConflicts] = useState<Set<string>>(new Set());
+  
+  // Automatically expand conflicts when they're detected
   useEffect(() => {
-    // Initialize token states from conflict data
-    const initialState: Record<string, string> = {};
-    if (conflict.tokens) {
-      conflict.tokens.forEach(token => {
-        initialState[token.id] = token.state;
-      });
-      setTokenState(initialState);
+    if (conflicts.length > 0) {
+      setExpandedConflicts(new Set(conflicts.map(token => token.position.toString())));
     }
-  }, [conflict]);
-
-  const handleTokenClick = (tokenId: string) => {
-    setTokenState(prev => {
-      const currentState = prev[tokenId] || 'CONFLICTED';
-      const newState = currentState === 'ACCEPTED' ? 'REJECTED' 
-                      : currentState === 'REJECTED' ? 'CONFLICTED' : 'ACCEPTED';
-      
-      // Set accessibility status for screen readers
-      setStatus(`Token marked as ${newState.toLowerCase()}`);
-      
-      return {
-        ...prev,
-        [tokenId]: newState
-      };
-    });
-  };
-
-  const handleMergeClick = () => {
-    setStatus('Merging both versions');
-    onResolve({
-      conflictId: conflict.id,
-      strategy: ConflictResolutionStrategy.MERGE
-    });
-  };
-
-  const handleKeepLocalClick = () => {
-    setStatus('Keeping local version');
-    onResolve({
-      conflictId: conflict.id,
-      strategy: ConflictResolutionStrategy.LOCAL_FIRST
-    });
-  };
-
-  const handleDiscardClick = () => {
-    setStatus('Using remote version');
-    onResolve({
-      conflictId: conflict.id,
-      strategy: ConflictResolutionStrategy.REMOTE_FIRST
-    });
-  };
-
-  const handleSuggestionAction = (suggestionId: string, accept: boolean) => {
-    // Handle related suggestion acceptance/rejection
-    setStatus(`Suggestion ${accept ? 'accepted' : 'rejected'}`);
-    console.log(`Suggestion ${suggestionId} ${accept ? 'accepted' : 'rejected'}`);
-    // Implementation would dispatch an action to handle the suggestion
-  };
-
-  const getConflictDescription = (): string => {
-    // Create a descriptive message about the conflict for screen readers
-    return `Conflict detected between local content "${conflict.localContent.substring(0, 30)}${conflict.localContent.length > 30 ? '...' : ''}" 
-            and remote content "${conflict.remoteContent.substring(0, 30)}${conflict.remoteContent.length > 30 ? '...' : ''}"`;
-  };
-
-  const applyTokenStateToContent = (conflict: Conflict, tokenState: Record<string, string>): string => {
-    // If we have operations, use them for precise merging
-    if (conflict.operations) {
-      let baseContent = conflict.localContent;
-      
-      // Find tokens marked as accepted from remote content
-      const acceptedRemoteTokens = conflict.tokens
-        ?.filter(token => tokenState[token.id] === 'ACCEPTED' && token.id.startsWith('remote-'))
-        .map(token => token.id);
-        
-      if (acceptedRemoteTokens?.length) {
-        // For each accepted remote token, apply its operation
-        // This is a simplified approach - a real implementation would be more complex
-        // to handle operation dependencies
-        const remoteOp = conflict.operations.remote;
-        
-        // Apply transformed remote operation
-        const transformedOp = OperationalTransform.transform(remoteOp, conflict.operations.local);
-        baseContent = OperationalTransform.apply(baseContent, transformedOp);
-      }
-      
-      return baseContent;
+  }, [conflicts.length]);
+  
+  if (!hasConflicts) {
+    return null;
+  }
+  
+  // Group conflicts by position for easier visualization
+  const conflictsByPosition: Record<number, Token[]> = {};
+  conflicts.forEach(conflict => {
+    if (!conflictsByPosition[conflict.position]) {
+      conflictsByPosition[conflict.position] = [];
     }
-    
-    // Fallback to simpler text-based approach
-    // This is a simplified implementation - a real one would use the token positions
-    let mergedContent = '';
-    let localContent = conflict.localContent;
-    let remoteContent = conflict.remoteContent;
-    
-    // Simple approach: use token state to decide which content to keep
-    conflict.tokens?.forEach(token => {
-      const state = tokenState[token.id] || token.state;
+    conflictsByPosition[conflict.position].push(conflict);
+  });
+  
+  // Get user information for a token
+  const getTokenUserInfo = (token: Token) => {
+    const timestamp = token.metadata.timestamp 
+      ? new Date(token.metadata.timestamp).toLocaleString()
+      : 'Unknown time';
       
-      if (state === 'ACCEPTED') {
-        mergedContent += token.text;
-      }
-    });
-    
-    return mergedContent || conflict.localContent; // Fallback to local if merge fails
+    return `${token.metadata.userId?.substring(0, 8) || 'Unknown user'} at ${timestamp}`;
   };
-
+  
+  // Toggle expanded state for a conflict group
+  const toggleExpanded = (position: number) => {
+    const newExpanded = new Set(expandedConflicts);
+    if (newExpanded.has(position.toString())) {
+      newExpanded.delete(position.toString());
+    } else {
+      newExpanded.add(position.toString());
+    }
+    setExpandedConflicts(newExpanded);
+  };
+  
+  // Handle accept/reject actions
+  const handleAcceptToken = (tokenId: string) => {
+    updateTokenState(tokenId, TokenState.ACCEPTED);
+  };
+  
+  const handleRejectToken = (tokenId: string) => {
+    updateTokenState(tokenId, TokenState.REJECTED);
+  };
+  
+  // Handle resolving all conflicts
+  const handleResolveAll = () => {
+    resolveAllConflicts(selectedStrategy);
+    if (onResolveAll) {
+      onResolveAll();
+    }
+  };
+  
   return (
-    <div 
-      className="conflict-panel" 
-      role="region" 
-      aria-label="Conflict Resolution Panel"
-    >
-      <div className="conflict-header">
-        <div className="conflict-icon" aria-hidden="true">⚠️</div>
-        <div className="conflict-title" id={`conflict-title-${conflict.id}`}>Conflict Detected</div>
-      </div>
-
-      {/* Accessibility status announcement */}
-      <div className="sr-only" aria-live="polite" role="status">
-        {status}
-      </div>
-      
-      {/* Screen reader description of the conflict */}
-      <div className="sr-only" id={`conflict-description-${conflict.id}`}>
-        {getConflictDescription()}
-      </div>
-
-      <div 
-        className="conflict-content" 
-        aria-labelledby={`conflict-title-${conflict.id}`}
-        aria-describedby={`conflict-description-${conflict.id}`}
-      >
-        <DiffView 
-          original={conflict.localContent} 
-          suggested={conflict.remoteContent}
-          tokenStates={tokenState}
-          onTokenClick={handleTokenClick}
-        />
-        
-        <div className="conflict-actions">
-          <button 
-            onClick={handleMergeClick} 
-            className="btn-merge"
-            aria-label="Merge both versions"
-          >
-            Merge
-          </button>
-          <button 
-            onClick={handleKeepLocalClick} 
-            className="btn-keep-local"
-            aria-label="Keep local version"
-          >
-            Keep Local
-          </button>
-          <button 
-            onClick={handleDiscardClick} 
-            className="btn-discard"
-            aria-label="Use remote version"
-          >
-            Discard
-          </button>
+    <div className={`bg-white shadow-lg rounded-lg p-4 ${className}`}>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-bold">Conflict Resolution</h2>
+        <div className="text-sm bg-yellow-100 rounded-full px-3 py-1 text-yellow-800">
+          {conflicts.length} {conflicts.length === 1 ? 'conflict' : 'conflicts'}
         </div>
       </div>
-
-      {relatedSuggestions.length > 0 && (
-        <div 
-          className="related-suggestions"
-          aria-labelledby="suggestions-title"
-        >
-          <div className="suggestions-header">
-            <div className="suggestions-icon" aria-hidden="true">🔎</div>
-            <div className="suggestions-title" id="suggestions-title">Related Suggestions</div>
-          </div>
-          
-          <div className="suggestions-list">
-            {relatedSuggestions.map(suggestion => (
-              <div 
-                key={suggestion.id} 
-                className="suggestion-item"
-                role="listitem"
-              >
-                <div className="suggestion-content">
-                  <span>Suggested: </span>
-                  <span className="suggested-text">{suggestion.content}</span>
-                </div>
-                <div className="suggestion-actions">
-                  <button 
-                    onClick={() => handleSuggestionAction(suggestion.id, true)}
-                    className="btn-accept"
-                    aria-label={`Accept suggestion: ${suggestion.content}`}
-                  >
-                    <span aria-hidden="true">✔️</span>
-                  </button>
-                  <button 
-                    onClick={() => handleSuggestionAction(suggestion.id, false)}
-                    className="btn-reject"
-                    aria-label={`Reject suggestion: ${suggestion.content}`}
-                  >
-                    <span aria-hidden="true">❌</span>
-                  </button>
+      
+      <p className="text-sm text-gray-600 mb-4">
+        Please resolve conflicts to ensure document consistency across all collaborators.
+      </p>
+      
+      <div className="space-y-4 max-h-96 overflow-y-auto">
+        {Object.entries(conflictsByPosition).map(([position, tokensAtPosition]) => (
+          <div key={position} className="border rounded-lg overflow-hidden">
+            <div 
+              className="bg-gray-100 p-3 flex justify-between items-center cursor-pointer"
+              onClick={() => toggleExpanded(parseInt(position))}
+            >
+              <h3 className="font-medium">
+                Position {position} - {tokensAtPosition.length} conflicting changes
+              </h3>
+              <span>
+                {expandedConflicts.has(position) ? '▼' : '▶'}
+              </span>
+            </div>
+            
+            {expandedConflicts.has(position) && (
+              <div className="p-3 space-y-3">
+                {tokensAtPosition.map(token => (
+                  <div key={token.id} className="flex flex-col border rounded p-2">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs text-gray-500">
+                        By {getTokenUserInfo(token)}
+                      </span>
+                      <div className="space-x-2">
+                        <button
+                          onClick={() => handleAcceptToken(token.id)}
+                          className="bg-green-500 hover:bg-green-600 text-white py-1 px-2 rounded text-sm"
+                        >
+                          Accept
+                        </button>
+                        <button
+                          onClick={() => handleRejectToken(token.id)}
+                          className="bg-red-500 hover:bg-red-600 text-white py-1 px-2 rounded text-sm"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-start">
+                      <div 
+                        className="py-1 px-2 rounded w-full font-mono text-sm"
+                        style={getTokenStyle(token.id)}
+                      >
+                        {token.text}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                
+                {/* Context viewer - show surrounding content */}
+                <div className="mt-2 border-t pt-2">
+                  <div className="text-xs text-gray-500 mb-1">Context</div>
+                  <div className="bg-gray-50 p-2 rounded font-mono text-sm break-all">
+                    {/* This is simplified - you'd need to extract actual context */}
+                    ...{tokens.find(t => t.position === parseInt(position))?.text || ''}...
+                  </div>
                 </div>
               </div>
-            ))}
+            )}
           </div>
+        ))}
+      </div>
+      
+      <div className="mt-4 pt-4 border-t">
+        <h3 className="font-medium mb-2">Resolve All Conflicts</h3>
+        <div className="flex flex-col space-y-2">
+          <div className="flex flex-wrap gap-2">
+            <select 
+              className="border rounded px-2 py-1 text-sm"
+              value={selectedStrategy}
+              onChange={(e) => setSelectedStrategy(e.target.value as any)}
+            >
+              <option value="accept-newest">Accept Newest</option>
+              <option value="accept-oldest">Accept Oldest</option>
+              <option value="accept-local">Accept Mine</option>
+              <option value="accept-remote">Accept Others</option>
+            </select>
+            <button
+              onClick={handleResolveAll}
+              className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-sm"
+            >
+              Apply to All
+            </button>
+          </div>
+          <p className="text-xs text-gray-500">
+            {selectedStrategy === 'accept-newest' && 'Accepts the most recent changes and rejects older ones.'}
+            {selectedStrategy === 'accept-oldest' && 'Accepts the original content and rejects newer changes.'}
+            {selectedStrategy === 'accept-local' && 'Accepts your changes and rejects changes from others.'}
+            {selectedStrategy === 'accept-remote' && 'Accepts changes from others and rejects your changes.'}
+          </p>
         </div>
-      )}
+      </div>
     </div>
   );
 };

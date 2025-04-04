@@ -1,49 +1,50 @@
 import React, { useCallback, useRef, useState, useEffect, useMemo } from 'react';
 import { Token, TokenState } from '../../collaboration/tokens/TokenStateManager';
-import { useTokenState } from '../../hooks/useTokenState';
+import { YjsUserAwareness } from '../../hooks/useYjsCollaboration';
 import { metricsCollector } from '../../metrics/metrics-collector';
 
 export interface DocumentVirtualizerProps {
   documentId: string;
   content: string;
+  tokens: Token[];
   viewportHeight: number;
   lineHeight?: number;
   onSelectionChange?: (selection: { start: number, end: number, text: string }) => void;
   onContentChange?: (content: string) => void;
+  onInsertText?: (text: string, position: number) => string;
+  onUpdateTokenState?: (tokenId: string, newState: TokenState) => void;
+  getTokenStyle?: (token: Token) => React.CSSProperties;
+  userCursors?: YjsUserAwareness[];
   readOnly?: boolean;
   className?: string;
 }
 
 /**
- * A virtualized document editor that integrates with TokenStateManager
- * for collaborative editing and conflict resolution
+ * A virtualized document editor component with collaborative features
  */
 export const DocumentVirtualizer: React.FC<DocumentVirtualizerProps> = ({
   documentId,
   content,
+  tokens,
   viewportHeight,
   lineHeight = 24,
   onSelectionChange,
   onContentChange,
+  onInsertText,
+  onUpdateTokenState,
+  getTokenStyle = () => ({}),
+  userCursors = [],
   readOnly = false,
   className = ''
 }) => {
-  // References and state
+  // References
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
+  
+  // State
   const [visibleRange, setVisibleRange] = useState({ start: 0, end: 20 });
   const [selection, setSelection] = useState<{ start: number, end: number } | null>(null);
   const [initialized, setInitialized] = useState(false);
-  
-  // Integrate with token state manager
-  const {
-    tokens,
-    hasConflicts,
-    addToken,
-    updateTokenState,
-    getTokenStyle,
-    isLoading
-  } = useTokenState(documentId);
   
   // Split content into lines for virtualization
   const lines = useMemo(() => {
@@ -61,6 +62,28 @@ export const DocumentVirtualizer: React.FC<DocumentVirtualizerProps> = ({
   
   // Calculate total document height
   const totalHeight = useMemo(() => lines.length * lineHeight, [lines.length, lineHeight]);
+  
+  // Calculate cursor positions for remote users
+  const cursorPositions = useMemo(() => {
+    return userCursors.map(user => {
+      if (!user.cursor) return null;
+      
+      // Calculate line index and character offset for cursor position
+      let remainingChars = user.cursor.position;
+      let lineIndex = 0;
+      
+      while (lineIndex < lines.length && remainingChars > lines[lineIndex].length) {
+        remainingChars -= lines[lineIndex].length + 1; // +1 for newline
+        lineIndex++;
+      }
+      
+      return {
+        ...user,
+        lineIndex,
+        charOffset: remainingChars
+      };
+    }).filter(Boolean);
+  }, [userCursors, lines]);
   
   // Initialize component after mount
   useEffect(() => {
@@ -115,7 +138,7 @@ export const DocumentVirtualizer: React.FC<DocumentVirtualizerProps> = ({
       return;
     }
     
-    // Calculate selection positions based on text nodes
+    // Calculate selection positions
     const selectedText = nativeSelection.toString();
     
     // This is a simplified approach - in real implementation,
@@ -127,43 +150,50 @@ export const DocumentVirtualizer: React.FC<DocumentVirtualizerProps> = ({
     if (startPos >= 0) {
       const newSelection = { 
         start: startPos, 
-        end: endPos, 
-        text: selectedText 
+        end: endPos 
       };
       
       setSelection(newSelection);
-      onSelectionChange(newSelection);
+      onSelectionChange({
+        ...newSelection,
+        text: selectedText
+      });
     }
   }, [onSelectionChange]);
   
-  // Handle text insertion (e.g. from typing or pasting)
+  // Handle text insertion
   const handleTextInsertion = useCallback((text: string, position: number) => {
-    if (readOnly) return;
+    if (readOnly || !onInsertText || !onContentChange) return;
     
-    // Add token to token state manager
-    addToken({
-      text,
-      position,
-      length: text.length,
-      metadata: {
-        state: TokenState.DEFAULT,
-        timestamp: Date.now()
-      }
-    });
+    // Create token via callback
+    onInsertText(text, position);
     
     // Update content
-    if (onContentChange) {
-      const newContent = 
-        content.substring(0, position) + 
-        text + 
-        content.substring(position);
-      
-      onContentChange(newContent);
-    }
-  }, [addToken, content, onContentChange, readOnly]);
+    const newContent = 
+      content.substring(0, position) + 
+      text + 
+      content.substring(position);
+    
+    onContentChange(newContent);
+  }, [readOnly, onInsertText, onContentChange, content]);
   
-  // Tokenize a line of text for rendering with state-based styling
-  const renderTokenizedLine = useCallback((lineContent: string, lineIndex: number) => {
+  // Handle token click (for accepting/rejecting)
+  const handleTokenClick = useCallback((token: Token) => {
+    if (readOnly || !onUpdateTokenState) return;
+    
+    // If token is in conflict state, show resolution UI
+    if (token.metadata.state === TokenState.CONFLICT) {
+      const accept = window.confirm(`Accept changes for "${token.text}"?`);
+      if (accept) {
+        onUpdateTokenState(token.id, TokenState.ACCEPTED);
+      } else {
+        onUpdateTokenState(token.id, TokenState.REJECTED);
+      }
+    }
+  }, [readOnly, onUpdateTokenState]);
+  
+  // Render a line with tokens and remote cursors
+  const renderLine = useCallback((lineContent: string, lineIndex: number) => {
     // Calculate the absolute position of this line in the document
     const lineStartPosition = lines.slice(0, lineIndex).join('\n').length + (lineIndex > 0 ? 1 : 0);
     const lineEndPosition = lineStartPosition + lineContent.length;
@@ -174,8 +204,13 @@ export const DocumentVirtualizer: React.FC<DocumentVirtualizerProps> = ({
       return token.position < lineEndPosition && tokenEnd > lineStartPosition;
     });
     
-    // If no tokens on this line, return the line as plain text
-    if (lineTokens.length === 0) {
+    // Find cursors on this line
+    const cursorsOnLine = cursorPositions.filter(cursor => 
+      cursor && cursor.lineIndex === lineIndex
+    );
+    
+    // If no tokens or cursors on this line, return the line as plain text
+    if (lineTokens.length === 0 && cursorsOnLine.length === 0) {
       return <span>{lineContent}</span>;
     }
     
@@ -186,11 +221,82 @@ export const DocumentVirtualizer: React.FC<DocumentVirtualizerProps> = ({
     const segments: JSX.Element[] = [];
     let currentPosition = lineStartPosition;
     
+    // Function to add cursor at a specific position
+    const addCursorsAt = (position: number) => {
+      const cursorsAtPosition = cursorsOnLine.filter(cursor => 
+        cursor && cursor.charOffset === position - lineStartPosition
+      );
+      
+      cursorsAtPosition.forEach(cursor => {
+        if (!cursor) return;
+        
+        segments.push(
+          <span 
+            key={`cursor-${cursor.clientId}`}
+            className="user-cursor"
+            style={{ 
+              backgroundColor: cursor.color,
+              width: '2px',
+              height: `${lineHeight}px`,
+              display: 'inline-block',
+              position: 'relative',
+              top: '2px',
+              marginRight: '-2px'
+            }}
+            title={cursor.name}
+          />
+        );
+        
+        // Add user name label above cursor
+        segments.push(
+          <span 
+            key={`cursor-label-${cursor.clientId}`}
+            className="user-cursor-label"
+            style={{ 
+              backgroundColor: cursor.color,
+              color: 'white',
+              fontSize: '10px',
+              padding: '2px 4px',
+              borderRadius: '2px',
+              position: 'absolute',
+              top: `-${lineHeight}px`,
+              left: '0px',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {cursor.name}
+          </span>
+        );
+      });
+    };
+    
     lineTokens.forEach((token, index) => {
+      // Add any cursors before this token
+      const tokenStart = Math.max(lineStartPosition, token.position);
+      
       // Add text before this token if there's a gap
-      if (token.position > currentPosition) {
-        const untokenizedText = content.substring(currentPosition, token.position);
-        segments.push(<span key={`text-${index}`}>{untokenizedText}</span>);
+      if (tokenStart > currentPosition) {
+        // Add cursors before the text
+        cursorsOnLine.forEach(cursor => {
+          if (!cursor) return;
+          
+          const cursorPos = lineStartPosition + cursor.charOffset;
+          if (cursorPos >= currentPosition && cursorPos < tokenStart) {
+            const textBefore = content.substring(currentPosition, cursorPos);
+            if (textBefore) {
+              segments.push(<span key={`text-before-${index}-${cursorPos}`}>{textBefore}</span>);
+            }
+            
+            addCursorsAt(cursorPos);
+            currentPosition = cursorPos;
+          }
+        });
+        
+        // Add remaining text before token
+        if (tokenStart > currentPosition) {
+          const untokenizedText = content.substring(currentPosition, tokenStart);
+          segments.push(<span key={`text-${index}`}>{untokenizedText}</span>);
+        }
       }
       
       // Get the part of the token text that belongs to this line
@@ -200,14 +306,15 @@ export const DocumentVirtualizer: React.FC<DocumentVirtualizerProps> = ({
       );
       
       // Add the token with its style
+      const tokenStyle = getTokenStyle(token);
       segments.push(
         <span 
           key={`token-${token.id}`}
-          style={getTokenStyle(token.id)}
+          style={tokenStyle}
           data-token-id={token.id}
           className="token"
-          title={`State: ${token.metadata.state}`}
-          onClick={() => handleTokenClick(token.id)}
+          title={`Token: ${token.id} (${token.metadata.state})`}
+          onClick={() => handleTokenClick(token)}
         >
           {tokenText}
         </span>
@@ -216,32 +323,30 @@ export const DocumentVirtualizer: React.FC<DocumentVirtualizerProps> = ({
       currentPosition = Math.min(lineEndPosition, token.position + token.length);
     });
     
-    // Add any remaining text after the last token
+    // Add any remaining cursors after tokens
+    cursorsOnLine.forEach(cursor => {
+      if (!cursor) return;
+      
+      const cursorPos = lineStartPosition + cursor.charOffset;
+      if (cursorPos >= currentPosition && cursorPos <= lineEndPosition) {
+        const textBefore = content.substring(currentPosition, cursorPos);
+        if (textBefore) {
+          segments.push(<span key={`text-after-${cursorPos}`}>{textBefore}</span>);
+        }
+        
+        addCursorsAt(cursorPos);
+        currentPosition = cursorPos;
+      }
+    });
+    
+    // Add any remaining text after the last token and cursor
     if (currentPosition < lineEndPosition) {
       const remainingText = content.substring(currentPosition, lineEndPosition);
       segments.push(<span key="text-end">{remainingText}</span>);
     }
     
     return <>{segments}</>;
-  }, [content, lines, tokens, getTokenStyle]);
-  
-  // Handle click on a token
-  const handleTokenClick = useCallback((tokenId: string) => {
-    if (readOnly) return;
-    
-    const token = tokens.find(t => t.id === tokenId);
-    if (!token) return;
-    
-    // If token is in conflict state, show a simple resolution UI
-    if (token.metadata.state === TokenState.CONFLICT) {
-      const accept = window.confirm(`Accept changes for "${token.text}"?`);
-      if (accept) {
-        updateTokenState(tokenId, TokenState.ACCEPTED);
-      } else {
-        updateTokenState(tokenId, TokenState.REJECTED);
-      }
-    }
-  }, [tokens, updateTokenState, readOnly]);
+  }, [content, lines, tokens, cursorPositions, lineHeight, getTokenStyle, handleTokenClick]);
   
   // Get visible lines for rendering
   const visibleLines = useMemo(() => 
@@ -249,8 +354,7 @@ export const DocumentVirtualizer: React.FC<DocumentVirtualizerProps> = ({
     [lines, visibleRange]
   );
   
-  // Handle simple text input (in a real implementation, you'd have
-  // a more sophisticated editor with content editable or a text area)
+  // Handle keyboard input
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (readOnly || !selection) return;
     
@@ -260,24 +364,13 @@ export const DocumentVirtualizer: React.FC<DocumentVirtualizerProps> = ({
       handleTextInsertion(e.key, selection.start);
       setSelection({
         start: selection.start + 1,
-        end: selection.start + 1,
-        text: ''
+        end: selection.start + 1
       });
     }
   }, [readOnly, selection, handleTextInsertion]);
   
-  if (isLoading) {
-    return <div className="p-4 bg-gray-100 rounded">Loading document...</div>;
-  }
-  
   return (
     <div className={`document-virtualizer ${className}`}>
-      {hasConflicts && (
-        <div className="bg-yellow-100 p-2 text-sm text-yellow-800 mb-2 rounded">
-          This document has unresolved conflicts. Open the conflict panel to resolve them.
-        </div>
-      )}
-      
       <div 
         ref={containerRef}
         onScroll={handleScroll}
@@ -287,7 +380,8 @@ export const DocumentVirtualizer: React.FC<DocumentVirtualizerProps> = ({
           position: 'relative',
           border: '1px solid #ddd',
           borderRadius: '4px',
-          padding: '8px'
+          padding: '8px',
+          fontFamily: 'monospace'
         }}
         className="document-viewport"
         onMouseUp={handleSelectionChange}
@@ -299,8 +393,7 @@ export const DocumentVirtualizer: React.FC<DocumentVirtualizerProps> = ({
           ref={editorRef}
           style={{ 
             height: totalHeight, 
-            position: 'relative',
-            fontFamily: 'monospace'
+            position: 'relative'
           }}
           className="document-content"
         >
@@ -319,22 +412,18 @@ export const DocumentVirtualizer: React.FC<DocumentVirtualizerProps> = ({
                   height: lineHeight, 
                   lineHeight: `${lineHeight}px`,
                   whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word'
+                  wordBreak: 'break-word',
+                  position: 'relative'
                 }}
                 className="document-line"
+                data-line-index={visibleRange.start + index}
               >
-                {renderTokenizedLine(line, visibleRange.start + index)}
+                {renderLine(line, visibleRange.start + index)}
               </div>
             ))}
           </div>
         </div>
       </div>
-      
-      {selection && (
-        <div className="mt-2 p-2 text-sm text-gray-600 border-t">
-          Selection: {selection.start}-{selection.end} ({selection.text ? selection.text.length : 0} chars)
-        </div>
-      )}
     </div>
   );
 };
