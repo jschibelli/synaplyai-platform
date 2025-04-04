@@ -1,211 +1,312 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { YjsProvider } from '../collaboration/yjs/YjsProvider';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import * as Y from 'yjs';
+import { WebsocketProvider } from 'y-websocket';
+import { IndexeddbPersistence } from 'y-indexeddb';
 import { Token, TokenState } from '../collaboration/tokens/TokenStateManager';
+import { metricsCollector } from '../metrics/metrics-collector';
+import { getTenantContext } from '../lib/tenant-context';
 import { useUser } from './useUser';
-import { useTenantContext } from './useTenantContext';
-import { triggerCommandEvent } from '../collaboration/commands/CommandEventBus';
 
-// Extract websocket URL from environment or use default
-const YJS_WEBSOCKET_URL = process.env.NEXT_PUBLIC_YJS_WEBSOCKET_URL || 'ws://localhost:1234';
+// Default colors for user cursors
+const USER_COLORS = [
+  '#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5',
+  '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4caf50',
+  '#8bc34a', '#cddc39', '#ffc107', '#ff9800', '#ff5722'
+];
 
-export interface YjsUserAwareness {
-  clientId: number;
+export interface UserPresence {
   userId: string;
+  clientId: number;
   name: string;
   color: string;
-  cursor: { position: number, selection?: { start: number, end: number } } | null;
+  cursor: {
+    position: number;
+    selection?: { start: number, end: number };
+  } | null;
 }
 
-export interface UseYjsCollaborationOptions {
+export interface YjsCollaborationOptions {
+  documentId: string;
   initialContent?: string;
-  onContentChanged?: (content: string) => void;
-  onTokensChanged?: (tokens: Token[]) => void;
+  onSyncError?: (error: Error) => void;
 }
 
 /**
- * Hook for real-time collaboration with YJS
+ * A React hook for using Y.js-based real-time collaboration
  */
-export function useYjsCollaboration(
-  documentId: string, 
-  options: UseYjsCollaborationOptions = {}
-) {
+export function useYjsCollaboration({
+  documentId,
+  initialContent = '',
+  onSyncError
+}: YjsCollaborationOptions) {
   const { user } = useUser();
-  const { tenantId } = useTenantContext();
-  const providerRef = useRef<YjsProvider | null>(null);
+  const tenantContext = getTenantContext();
+  const tenantId = tenantContext?.tenantId || 'default';
   
-  const [content, setContent] = useState<string>(options.initialContent || '');
+  // State
+  const [isConnected, setIsConnected] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [content, setContent] = useState(initialContent);
   const [tokens, setTokens] = useState<Token[]>([]);
-  const [users, setUsers] = useState<YjsUserAwareness[]>([]);
-  const [isConnected, setIsConnected] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [awareness, setAwareness] = useState<UserPresence[]>([]);
   const [error, setError] = useState<Error | null>(null);
   
-  // Initialize YJS provider
+  // Refs to hold Y.js instances
+  const docRef = useRef<Y.Doc | null>(null);
+  const wsProviderRef = useRef<WebsocketProvider | null>(null);
+  const dbProviderRef = useRef<IndexeddbPersistence | null>(null);
+  const yTextRef = useRef<Y.Text | null>(null);
+  const yTokensRef = useRef<Y.Map<Token> | null>(null);
+  
+  // Random user color
+  const userColorRef = useRef(USER_COLORS[Math.floor(Math.random() * USER_COLORS.length)]);
+  
+  // Initialize Y.js
   useEffect(() => {
-    if (!user?.id || !tenantId || !documentId) return;
+    if (!documentId || !user?.id || isInitialized) return;
+    
+    const startTime = performance.now();
     
     try {
-      setIsLoading(true);
+      // Create Y.js document
+      const yDoc = new Y.Doc();
+      docRef.current = yDoc;
       
-      // Create YJS provider
-      providerRef.current = new YjsProvider({
-        documentId,
-        userId: user.id,
-        username: user.name || undefined,
-        websocketUrl: YJS_WEBSOCKET_URL,
-        tenantId
+      // Create shared document elements
+      const yText = yDoc.getText('content');
+      const yTokens = yDoc.getMap<Token>('tokens');
+      yTextRef.current = yText;
+      yTokensRef.current = yTokens;
+      
+      // Set up WebSocket provider for real-time collaboration
+      const wsProvider = new WebsocketProvider(
+        `ws://${window.location.host}/yjs`, // Connect to local WebSocket server
+        `${tenantId}-${documentId}`,
+        yDoc,
+        {
+          params: {
+            tenantId,
+            docName: documentId,
+            userId: user.id
+          }
+        }
+      );
+      wsProviderRef.current = wsProvider;
+      
+      // Set up IndexedDB provider for offline persistence
+      const dbProvider = new IndexeddbPersistence(
+        `${tenantId}-docs`,
+        yDoc
+      );
+      dbProviderRef.current = dbProvider;
+      
+      // Connection status
+      wsProvider.on('status', ({ status }: { status: string }) => {
+        setIsConnected(status === 'connected');
+        
+        if (status === 'connected') {
+          metricsCollector.increment('yjs.client.connected', {
+            tenantId,
+            documentId
+          });
+        } else {
+          metricsCollector.increment('yjs.client.connection_status', {
+            tenantId,
+            documentId,
+            status
+          });
+        }
       });
       
-      // Set initial content if provided
-      const currentText = providerRef.current.getText();
-      if (!currentText && options.initialContent) {
-        providerRef.current.updateText(options.initialContent, 'init');
-      } else if (currentText) {
-        setContent(currentText);
-      }
+      // Set awareness (user presence) data
+      wsProvider.awareness.setLocalState({
+        userId: user.id,
+        name: user.name || `User-${user.id.substring(0, 5)}`,
+        color: userColorRef.current,
+        cursor: null
+      });
       
-      // Set initial tokens
-      setTokens(providerRef.current.getAllTokens());
+      // Update awareness data when other users change
+      wsProvider.awareness.on('update', () => {
+        const states = wsProvider.awareness.getStates();
+        const presenceInfo = Array.from(states.entries())
+          .map(([clientId, state]: [number, any]) => {
+            if (!state) return null;
+            return {
+              clientId,
+              userId: state.userId,
+              name: state.name,
+              color: state.color,
+              cursor: state.cursor
+            };
+          })
+          .filter(Boolean) as UserPresence[];
+          
+        setAwareness(presenceInfo);
+      });
+      
+      // Sync status events
+      dbProvider.on('synced', () => {
+        // Set initial content if document is empty
+        if (yText.toString() === '' && initialContent) {
+          yText.insert(0, initialContent);
+        }
+        
+        // Update initial state
+        setContent(yText.toString());
+        setTokens(Array.from(yTokens.values()));
+        setIsInitialized(true);
+        
+        metricsCollector.increment('yjs.client.synced', {
+          tenantId,
+          documentId
+        });
+      });
+      
+      // Error handling
+      wsProvider.on('connection-error', (error: Error) => {
+        console.error('YJS connection error:', error);
+        
+        if (onSyncError) {
+          onSyncError(error);
+        }
+        
+        setError(error);
+        
+        metricsCollector.increment('yjs.client.connection_error', {
+          tenantId,
+          documentId,
+          errorMessage: error.message
+        });
+      });
       
       // Listen for text changes
-      providerRef.current.on('textChanged', ({ delta, origin }) => {
-        if (origin === 'local') return; // Skip local changes as they're already applied
-        
-        const newText = providerRef.current?.getText() || '';
-        setContent(newText);
-        
-        if (options.onContentChanged) {
-          options.onContentChanged(newText);
-        }
+      yText.observe(() => {
+        setContent(yText.toString());
       });
       
       // Listen for token changes
-      providerRef.current.on('tokensChanged', ({ changes, origin }) => {
-        const allTokens = providerRef.current?.getAllTokens() || [];
-        setTokens(allTokens);
-        
-        if (options.onTokensChanged) {
-          options.onTokensChanged(allTokens);
-        }
+      yTokens.observe(() => {
+        setTokens(Array.from(yTokens.values()));
       });
       
-      // Listen for awareness changes
-      providerRef.current.on('awarenessChanged', ({ users: newUsers }) => {
-        setUsers(newUsers);
+      // Track performance
+      const duration = performance.now() - startTime;
+      metricsCollector.recordValue('yjs.client.initialization', duration, {
+        tenantId,
+        documentId
       });
       
-      // Listen for connection state changes
-      providerRef.current.on('connectionStateChanged', (connected: boolean) => {
-        setIsConnected(connected);
-      });
-      
-      // Listen for sync completed
-      providerRef.current.on('synced', () => {
-        setIsLoading(false);
-      });
-      
-      // Set initial connection state
-      setIsConnected(providerRef.current.isConnected());
-      
-      // Set loading state to false after a timeout if sync doesn't complete
-      const timeoutId = setTimeout(() => {
-        setIsLoading(false);
-      }, 3000);
-      
+      // Cleanup on unmount
       return () => {
-        clearTimeout(timeoutId);
-        if (providerRef.current) {
-          providerRef.current.destroy();
-          providerRef.current = null;
+        if (wsProviderRef.current) {
+          wsProviderRef.current.awareness.setLocalState(null);
+          wsProviderRef.current.disconnect();
         }
+        
+        if (dbProviderRef.current) {
+          dbProviderRef.current.destroy();
+        }
+        
+        if (docRef.current) {
+          docRef.current.destroy();
+        }
+        
+        yTextRef.current = null;
+        yTokensRef.current = null;
+        wsProviderRef.current = null;
+        dbProviderRef.current = null;
+        docRef.current = null;
       };
     } catch (err) {
       console.error('Error initializing YJS collaboration:', err);
       setError(err instanceof Error ? err : new Error(String(err)));
-      setIsLoading(false);
+      
+      metricsCollector.increment('yjs.client.initialization_error', {
+        tenantId,
+        documentId,
+        errorMessage: err instanceof Error ? err.message : String(err)
+      });
     }
-  }, [documentId, user?.id, user?.name, tenantId, options.initialContent, options.onContentChanged, options.onTokensChanged]);
+  }, [documentId, user?.id, user?.name, tenantId, initialContent, isInitialized, onSyncError]);
   
-  // Update content
+  // Update content in the Y.js document
   const updateContent = useCallback((newContent: string) => {
-    if (!providerRef.current || !user?.id) return;
+    if (!yTextRef.current || !docRef.current) return;
     
-    providerRef.current.updateText(newContent, 'local');
-    setContent(newContent);
-    
-    // Track command for event sourcing
-    triggerCommandEvent({
-      type: 'UPDATE_DOCUMENT_CONTENT',
-      documentId,
-      userId: user.id,
-      data: { content: newContent }
+    docRef.current.transact(() => {
+      yTextRef.current?.delete(0, yTextRef.current.length);
+      yTextRef.current?.insert(0, newContent);
     });
-  }, [documentId, user?.id]);
+  }, []);
   
-  // Add a token
-  const addToken = useCallback((token: Token) => {
-    if (!providerRef.current || !user?.id) return;
+  // Update tokens in the Y.js document
+  const updateToken = useCallback((token: Token) => {
+    if (!yTokensRef.current) return;
     
-    providerRef.current.setToken(token);
-    setTokens(providerRef.current.getAllTokens());
-    
-    // Track command for event sourcing
-    triggerCommandEvent({
-      type: 'ADD_TOKEN',
-      documentId,
-      userId: user.id,
-      data: { token }
-    });
-  }, [documentId, user?.id]);
+    yTokensRef.current.set(token.id, token);
+  }, []);
   
   // Update token state
   const updateTokenState = useCallback((tokenId: string, newState: TokenState) => {
-    if (!providerRef.current || !user?.id) return;
+    if (!yTokensRef.current) return false;
     
-    const success = providerRef.current.updateTokenState(tokenId, newState);
-    if (success) {
-      setTokens(providerRef.current.getAllTokens());
-      
-      // Track command for event sourcing
-      triggerCommandEvent({
-        type: 'UPDATE_TOKEN_STATE',
-        documentId,
-        userId: user.id,
-        data: { tokenId, newState }
-      });
-    }
-  }, [documentId, user?.id]);
+    const token = yTokensRef.current.get(tokenId);
+    if (!token) return false;
+    
+    const updatedToken: Token = {
+      ...token,
+      metadata: {
+        ...token.metadata,
+        state: newState
+      }
+    };
+    
+    yTokensRef.current.set(tokenId, updatedToken);
+    return true;
+  }, []);
   
   // Update cursor position
-  const updateCursor = useCallback((position: number | null, selection?: { start: number, end: number }) => {
-    if (!providerRef.current) return;
+  const updateCursor = useCallback((position: number, selection?: { start: number, end: number }) => {
+    if (!wsProviderRef.current) return;
     
-    providerRef.current.updateCursor(position, selection);
+    const awareness = wsProviderRef.current.awareness;
+    const currentState = awareness.getLocalState() || {};
+    
+    awareness.setLocalState({
+      ...currentState,
+      cursor: {
+        position,
+        selection
+      }
+    });
   }, []);
   
-  // Undo/redo functionality
-  const undo = useCallback(() => {
-    if (!providerRef.current) return;
-    providerRef.current.undo();
-  }, []);
-  
-  const redo = useCallback(() => {
-    if (!providerRef.current) return;
-    providerRef.current.redo();
+  // Remove cursor (when user stops editing)
+  const removeCursor = useCallback(() => {
+    if (!wsProviderRef.current) return;
+    
+    const awareness = wsProviderRef.current.awareness;
+    const currentState = awareness.getLocalState() || {};
+    
+    awareness.setLocalState({
+      ...currentState,
+      cursor: null
+    });
   }, []);
   
   return {
+    isConnected,
+    isInitialized,
     content,
     tokens,
-    users,
-    isConnected,
-    isLoading,
+    awareness,
     error,
     updateContent,
-    addToken,
+    updateToken,
     updateTokenState,
     updateCursor,
-    undo,
-    redo
+    removeCursor,
+    userColor: userColorRef.current
   };
 }

@@ -1,7 +1,6 @@
 const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
-const { createYjsWebsocketServer } = require('./dist/server/yjsWebsocketServer');
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
@@ -11,11 +10,32 @@ const port = parseInt(process.env.PORT || '3000', 10);
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
+// Initialize Y.js WebSocket server
+const initYjsWebSocketServer = (server) => {
+  try {
+    let setupYjsWebSocketServer;
+    
+    // In development, use esbuild-register to load TypeScript directly
+    if (dev) {
+      require('esbuild-register');
+      setupYjsWebSocketServer = require('./src/server/yjsWebsocketServer').setupYjsWebSocketServer;
+    } else {
+      // In production, use the compiled JavaScript
+      setupYjsWebSocketServer = require('./dist/server/yjsWebsocketServer').setupYjsWebSocketServer;
+    }
+    
+    setupYjsWebSocketServer(server);
+    console.log('YJS WebSocket server initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize YJS WebSocket server:', error);
+  }
+};
+
 app.prepare().then(() => {
   // Create HTTP server
   const server = createServer(async (req, res) => {
     try {
-      // Parse the URL
+      // Parse URL
       const parsedUrl = parse(req.url, true);
       
       // Let Next.js handle the request
@@ -28,10 +48,7 @@ app.prepare().then(() => {
   });
   
   // Initialize YJS WebSocket server
-  createYjsWebsocketServer(server, {
-    pingInterval: 30000,
-    gcEnabled: true
-  });
+  initYjsWebSocketServer(server);
   
   // Start listening
   server.listen(port, (err) => {
