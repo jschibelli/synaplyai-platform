@@ -1,42 +1,55 @@
+import { jest } from '@jest/globals';
 
-import { TenantContext } from '../types/shared-interfaces';
+/**
+ * Mock implementation of tenant context management
+ */
 
-export const mockTenantContext = (tenantId = 'test-tenant', userId = 'test-user'): TenantContext => ({
-  tenantId,
-  userId,
-  requestId: `req-${Math.random().toString(36).substring(2, 9)}`,
-  traceId: `trace-${Math.random().toString(36).substring(2, 9)}`
-});
-
-// Mock the AsyncLocalStorage run method
-const mockContextMap = new Map<string, any>();
-
-export const tenantContextStorage = {
-  run: (context: any, fn: () => any) => {
-    const previousContext = getTenantContextMock();
-    setTenantContextMock(context);
-    try {
-      return fn();
-    } finally {
-      setTenantContextMock(previousContext);
-    }
+// Store for the current tenant context in tests
+let mockTenantContext: any = {
+  tenantId: 'default-tenant',
+  userId: 'default-user',
+  features: {
+    enableCollaboration: true,
+    enableAI: true,
+    maxDocuments: 100
   }
 };
 
-export function mockTenantContext(tenantId = 'test-tenant', userId = 'test-user') {
-  return {
-    tenantId,
-    userId,
-    requestId: `req-${Math.random().toString(36).substring(2, 9)}`,
-    traceId: `trace-${Math.random().toString(36).substring(2, 9)}`
+/**
+ * Get the current tenant context
+ */
+export const getTenantContextMock = jest.fn().mockImplementation(() => {
+  return mockTenantContext;
+});
+
+/**
+ * Set the tenant context for testing
+ */
+export const setTenantContextMock = jest.fn().mockImplementation((context: any) => {
+  mockTenantContext = {
+    ...mockTenantContext,
+    ...context
   };
-}
+  return mockTenantContext;
+});
 
-export const getTenantContextMock = jest.fn().mockReturnValue(mockTenantContext());
-export const setTenantContextMock = jest.fn();
-export const clearTenantContextMock = jest.fn();
-export const getCurrentTenantIdMock = jest.fn().mockReturnValue('test-tenant');
-export const getCurrentUserIdMock = jest.fn().mockReturnValue('test-user');
-export const setCurrentTenantContext = jest.fn();
+/**
+ * Clear the tenant context
+ */
+export const clearTenantContextMock = jest.fn().mockImplementation(() => {
+  mockTenantContext = {
+    tenantId: 'default-tenant',
+    userId: 'default-user',
+    features: {
+      enableCollaboration: true,
+      enableAI: true,
+      maxDocuments: 100
+    }
+  };
+});
 
-
+export default {
+  getTenantContextMock,
+  setTenantContextMock,
+  clearTenantContextMock
+};

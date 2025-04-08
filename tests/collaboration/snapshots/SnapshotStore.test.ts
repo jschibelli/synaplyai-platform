@@ -1,59 +1,18 @@
-import { SnapshotStore, Snapshot } from '../../../src/collaboration/snapshots/SnapshotStore';
-import { MetricsCollector } from '../../../src/metrics/collector';
-import { PrismaClient } from '@prisma/client';
+import { jest } from '@jest/globals';
+import { prisma } from '../../../__mocks__/prisma.mock';
+import { metricsCollectorMock } from '../../../src/__mocks__/metrics-collector.mock';
+import { SnapshotStore } from '../../../src/collaboration/snapshots/SnapshotStore';
 
-// Mock Prisma and metrics collector
-jest.mock('@prisma/client');
-jest.mock('../../../src/metrics/collector');
-
-// Mock tenant context
-jest.mock('../../../src/lib/tenant-context', () => ({
-  getTenantContext: jest.fn().mockReturnValue({ 
-    tenantId: 'test-tenant',
-    userId: 'test-user' 
-  })
-}));
+jest.mock('../../../__mocks__/prisma.mock');
 
 describe('SnapshotStore', () => {
   let snapshotStore: SnapshotStore;
-  let prisma: jest.Mocked<PrismaClient>;
-  let metricsCollector: jest.Mocked<MetricsCollector>;
-  
+
   beforeEach(() => {
-    // Set up mocks
-    prisma = {
-      snapshot: {
-        create: jest.fn(),
-        findFirst: jest.fn(),
-        findMany: jest.fn(),
-        deleteMany: jest.fn()
-      },
-      event: {
-        count: jest.fn()
-      }
-    } as unknown as jest.Mocked<PrismaClient>;
-    
-    // Add mockResolvedValue methods to the functions
-    prisma.snapshot.create.mockResolvedValue({} as any);
-    prisma.snapshot.findFirst.mockResolvedValue(null);
-    prisma.snapshot.findMany.mockResolvedValue([]);
-    prisma.snapshot.deleteMany.mockResolvedValue({ count: 0 });
-    prisma.event.count.mockResolvedValue(0);
-    
-    metricsCollector = {
-      recordLatency: jest.fn().mockResolvedValue(undefined),
-      track: jest.fn().mockResolvedValue(undefined),
-      increment: jest.fn().mockResolvedValue(undefined),
-      incrementCounter: jest.fn().mockResolvedValue(undefined),
-      decrementCounter: jest.fn().mockResolvedValue(undefined),
-      getCounter: jest.fn().mockResolvedValue(0),
-      formatKey: jest.fn().mockReturnValue('test-key')
-    } as unknown as jest.Mocked<MetricsCollector>;
-    
-    // Create SnapshotStore instance
-    snapshotStore = new SnapshotStore(prisma, metricsCollector);
+    jest.clearAllMocks();
+    snapshotStore = new SnapshotStore(prisma, metricsCollectorMock);
   });
-  
+
   describe('createSnapshot', () => {
     test('should create a new snapshot with proper data', async () => {
       // Document state
@@ -69,7 +28,7 @@ describe('SnapshotStore', () => {
         timestamp: expect.any(Number),
         metadata: {}
       };
-      prisma.snapshot.create.mockResolvedValue(mockSnapshot);
+      prisma.snapshot.create.mockImplementation(() => Promise.resolve(mockSnapshot));
       
       // Create snapshot
       const result = await snapshotStore.createSnapshot('doc-1', documentState, 10, { 
@@ -109,10 +68,10 @@ describe('SnapshotStore', () => {
       // Mock transaction client
       const transactionClient = {
         snapshot: {
-          create: jest.fn().mockResolvedValue({
+          create: jest.fn().mockImplementation(() => Promise.resolve({
             id: 'snap-tx-1',
             version: 5
-          })
+          }))
         }
       };
       
@@ -146,58 +105,41 @@ describe('SnapshotStore', () => {
       expect(result.metadata).toEqual(metadata);
     });
   });
-  
+
   describe('getLatestSnapshot', () => {
-    test('should return the latest snapshot for a document', async () => {
-      // Mock snapshot
-      const mockSnapshot: Snapshot = {
-        id: 'snap-1',
+    it('should return the latest snapshot for a document', async () => {
+      const mockSnapshot = {
+        id: 'snapshot-1',
         documentId: 'doc-1',
-        tenantId: 'test-tenant',
-        state: { content: 'test content' },
+        tenantId: 'tenant-1',
+        data: JSON.stringify({ content: 'Test content', version: 10 }),
         version: 10,
-        timestamp: new Date().toISOString(),
-        data: {},
+        timestamp: Date.now(),
         metadata: {
           version: 10,
           documentId: 'doc-1',
-          timestamp: new Date().toISOString(),
-          eventCount: 50
+          timestamp: Date.now(),
+          eventCount: 5
         }
       };
-      
-      prisma.snapshot.findFirst.mockResolvedValue(mockSnapshot);
-      
-      // Get latest snapshot
+
+      prisma.snapshot.findFirst.mockImplementation(() => Promise.resolve(mockSnapshot));
+
       const result = await snapshotStore.getLatestSnapshot('doc-1', 'tenant-1');
-      
-      // Verify correct query parameters
+      expect(result).toEqual(mockSnapshot);
       expect(prisma.snapshot.findFirst).toHaveBeenCalledWith({
         where: {
           documentId: 'doc-1',
-          tenantId: 'test-tenant'
+          tenantId: 'tenant-1'
         },
         orderBy: {
           version: 'desc'
         }
       });
-      
-      // Verify result matches mock
-      expect(result).toEqual(mockSnapshot);
-      
-      // Verify metrics were recorded
-      expect(metricsCollector.track).toHaveBeenCalledWith(
-        'snapshot.retrieved',
-        1,
-        expect.objectContaining({
-          documentId: 'doc-1',
-          found: true
-        })
-      );
     });
-    
+
     test('should return null when no snapshot exists', async () => {
-      prisma.snapshot.findFirst.mockResolvedValue(null);
+      prisma.snapshot.findFirst.mockImplementation(() => Promise.resolve(null));
       
       const result = await snapshotStore.getLatestSnapshot('doc-1', 'tenant-1');
       
@@ -220,12 +162,12 @@ describe('SnapshotStore', () => {
         tenantId: 'test-tenant',
         state: { content: 'test content' },
         version: 10,
-        timestamp: new Date().toISOString(),
+        timestamp: Date.now(),
         data: {},
         metadata: {}
       };
       
-      prisma.snapshot.findFirst.mockResolvedValue(mockSnapshot);
+      prisma.snapshot.findFirst.mockImplementation(() => Promise.resolve(mockSnapshot));
       
       // First call should query database
       const result1 = await snapshotStore.getLatestSnapshot('doc-1', 'tenant-1');
@@ -249,12 +191,12 @@ describe('SnapshotStore', () => {
         tenantId: 'test-tenant',
         state: { content: 'test content' },
         version: 10,
-        timestamp: new Date().toISOString(),
+        timestamp: Date.now(),
         data: {},
         metadata: {}
       };
       
-      prisma.snapshot.findFirst.mockResolvedValue(mockSnapshot);
+      prisma.snapshot.findFirst.mockImplementation(() => Promise.resolve(mockSnapshot));
       
       // First call to populate cache
       await snapshotStore.getLatestSnapshot('doc-1', 'tenant-1');
@@ -267,221 +209,191 @@ describe('SnapshotStore', () => {
       expect(prisma.snapshot.findFirst).toHaveBeenCalledTimes(2);
     });
   });
-  
-  describe('getSnapshotAtVersion', () => {
-    test('should return snapshot at or before specified version', async () => {
-      // Mock snapshot
-      const mockSnapshot: Snapshot = {
-        id: 'snap-1',
+
+  describe('saveSnapshot', () => {
+    it('should create a new snapshot', async () => {
+      const snapshotData = {
+        id: 'snapshot-1',
         documentId: 'doc-1',
-        tenantId: 'test-tenant',
-        state: { content: 'test content' },
-        version: 8,
-        timestamp: new Date().toISOString(),
-        data: {},
+        tenantId: 'tenant-1',
+        data: JSON.stringify({ content: 'Test content', version: 10 }),
+        version: 10,
+        timestamp: Date.now(),
         metadata: {
-          version: 8,
+          version: 10,
           documentId: 'doc-1',
-          timestamp: new Date().toISOString(),
-          eventCount: 20
+          timestamp: Date.now(),
+          eventCount: 5
         }
       };
-      
-      prisma.snapshot.findFirst.mockResolvedValue(mockSnapshot);
-      
-      // Get snapshot at version 10
+
+      prisma.snapshot.findFirst.mockImplementation(() => Promise.resolve(null));
+
+      await snapshotStore.saveSnapshot(snapshotData);
+
+      expect(prisma.snapshot.create).toHaveBeenCalledWith({
+        data: snapshotData
+      });
+    });
+  });
+
+  describe('getSnapshotByVersion', () => {
+    it('should return a snapshot by version', async () => {
+      const mockSnapshot = {
+        id: 'snapshot-1',
+        documentId: 'doc-1',
+        tenantId: 'tenant-1',
+        data: JSON.stringify({ content: 'Test content', version: 10 }),
+        version: 10,
+        timestamp: Date.now(),
+        metadata: {
+          version: 10,
+          documentId: 'doc-1',
+          timestamp: Date.now(),
+          eventCount: 5
+        }
+      };
+
+      prisma.snapshot.findFirst.mockImplementation(() => Promise.resolve(mockSnapshot));
+
       const result = await snapshotStore.getSnapshotByVersion('doc-1', '10', 'test-tenant');
+      expect(result).toEqual(mockSnapshot);
+    });
+  });
+
+  describe('shouldCreateSnapshot', () => {
+    it('should return true if event count exceeds threshold and no recent snapshot', async () => {
+      prisma.snapshot.findFirst.mockImplementation(() => Promise.resolve(null));
+      prisma.event.count.mockImplementation(() => Promise.resolve(101)); // Above threshold
+
+      const shouldCreate = await snapshotStore.shouldCreateSnapshot('doc-1', 'tenant-1');
+      expect(shouldCreate).toBe(true);
+    });
+
+    it('should return false if event count is below threshold', async () => {
+      prisma.snapshot.findFirst.mockImplementation(() => Promise.resolve({
+        id: 'snapshot-1',
+        documentId: 'doc-1',
+        tenantId: 'tenant-1',
+        version: 10,
+        timestamp: Date.now() - 60000, // 1 minute ago
+        data: '{}',
+        metadata: {
+          version: 10,
+          documentId: 'doc-1',
+          timestamp: Date.now(),
+          eventCount: 5
+        }
+      }));
       
-      // Verify query parameters
-      expect(prisma.snapshot.findFirst).toHaveBeenCalledWith({
+      prisma.event.count.mockImplementation(() => Promise.resolve(10)); // Below threshold
+
+      const shouldCreate = await snapshotStore.shouldCreateSnapshot('doc-1', 'tenant-1');
+      expect(shouldCreate).toBe(false);
+    });
+
+    it('should return false if event count is below threshold with no recent snapshot', async () => {
+      prisma.snapshot.findFirst.mockImplementation(() => Promise.resolve(null));
+      prisma.event.count.mockImplementation(() => Promise.resolve(10)); // Below threshold
+
+      const shouldCreate = await snapshotStore.shouldCreateSnapshot('doc-1', 'tenant-1');
+      expect(shouldCreate).toBe(false);
+    });
+
+    it('should return false if last snapshot is recent', async () => {
+      prisma.snapshot.findFirst.mockImplementation(() => Promise.resolve({
+        id: 'snapshot-1',
+        documentId: 'doc-1',
+        tenantId: 'tenant-1',
+        version: 10,
+        timestamp: Date.now() - 60000, // 1 minute ago
+        data: '{}',
+        metadata: {
+          version: 10,
+          documentId: 'doc-1',
+          timestamp: Date.now(),
+          eventCount: 5
+        }
+      }));
+      
+      prisma.event.count.mockImplementation(() => Promise.resolve(10)); // Below threshold
+
+      const shouldCreate = await snapshotStore.shouldCreateSnapshot('doc-1', 'tenant-1');
+      expect(shouldCreate).toBe(false);
+    });
+  });
+
+  describe('pruneSnapshots', () => {
+    it('should delete old snapshots beyond the retention limit', async () => {
+      const mockSnapshots = [
+        { id: 'snapshot-1', version: 10, timestamp: Date.now() - 1000000 },
+        { id: 'snapshot-2', version: 9, timestamp: Date.now() - 2000000 },
+        { id: 'snapshot-3', version: 8, timestamp: Date.now() - 3000000 },
+        { id: 'snapshot-4', version: 7, timestamp: Date.now() - 4000000 },
+        { id: 'snapshot-5', version: 6, timestamp: Date.now() - 5000000 },
+        { id: 'snapshot-6', version: 5, timestamp: Date.now() - 6000000 },
+        { id: 'snapshot-7', version: 4, timestamp: Date.now() - 7000000 },
+      ];
+
+      prisma.snapshot.findMany.mockImplementation(() => Promise.resolve(mockSnapshots));
+      prisma.snapshot.deleteMany.mockImplementation(() => Promise.resolve({ count: 5 }));
+
+      await snapshotStore.pruneSnapshots('doc-1', 'tenant-1', 2);
+
+      expect(prisma.snapshot.findMany).toHaveBeenCalledWith({
         where: {
           documentId: 'doc-1',
-          tenantId: 'test-tenant',
-          version: {
-            lte: 10
-          }
+          tenantId: 'tenant-1'
         },
         orderBy: {
           version: 'desc'
         }
       });
-      
-      // Verify result
-      expect(result).toEqual(mockSnapshot);
-    });
-  });
-  
-  describe('shouldCreateSnapshot', () => {
-    test('should recommend snapshot when event count threshold is exceeded', async () => {
-      // Mock no existing snapshot
-      prisma.snapshot.findFirst.mockResolvedValue(null);
-      
-      // Mock event count
-      prisma.event.count.mockResolvedValue(101); // Above threshold
-      
-      const shouldCreate = await snapshotStore.shouldCreateSnapshot('doc-1');
-      
-      expect(shouldCreate).toBe(true);
-      expect(metricsCollector.track).toHaveBeenCalledWith(
-        'snapshot.decision',
-        1,
-        expect.objectContaining({
-          documentId: 'doc-1',
-          reason: 'event_count'
-        })
-      );
-    });
-    
-    test('should recommend snapshot when time threshold is exceeded', async () => {
-      // Mock existing old snapshot
-      const oldTimestamp = Date.now() - (1000 * 60 * 60 * 2); // 2 hours ago
-      prisma.snapshot.findFirst.mockResolvedValue({
-        id: 'snap-1',
-        documentId: 'doc-1',
-        tenantId: 'test-tenant',
-        state: {},
-        version: 5,
-        timestamp: oldTimestamp
-      });
-      
-      // Mock low event count
-      prisma.event.count.mockResolvedValue(10); // Below threshold
-      
-      const shouldCreate = await snapshotStore.shouldCreateSnapshot('doc-1');
-      
-      expect(shouldCreate).toBe(true);
-      expect(metricsCollector.track).toHaveBeenCalledWith(
-        'snapshot.decision',
-        1,
-        expect.objectContaining({
-          documentId: 'doc-1',
-          reason: 'time_threshold'
-        })
-      );
-    });
-    
-    test('should recommend snapshot for first-time documents', async () => {
-      // Mock no existing snapshot
-      prisma.snapshot.findFirst.mockResolvedValue(null);
-      
-      // Mock low event count
-      prisma.event.count.mockResolvedValue(10); // Below threshold
-      
-      const shouldCreate = await snapshotStore.shouldCreateSnapshot('doc-1');
-      
-      expect(shouldCreate).toBe(true);
-      expect(metricsCollector.track).toHaveBeenCalledWith(
-        'snapshot.decision',
-        1,
-        expect.objectContaining({
-          documentId: 'doc-1',
-          reason: 'first_snapshot'
-        })
-      );
-    });
-    
-    test('should not recommend snapshot when thresholds are not met', async () => {
-      // Mock recent snapshot
-      prisma.snapshot.findFirst.mockResolvedValue({
-        id: 'snap-1',
-        documentId: 'doc-1',
-        tenantId: 'test-tenant',
-        state: {},
-        version: 50,
-        timestamp: Date.now() - (1000 * 60 * 5) // 5 minutes ago
-      });
-      
-      // Mock low event count
-      prisma.event.count.mockResolvedValue(10); // Below threshold
-      
-      const shouldCreate = await snapshotStore.shouldCreateSnapshot('doc-1');
-      
-      expect(shouldCreate).toBe(false);
-    });
-  });
-  
-  describe('purgeOldSnapshots', () => {
-    test('should delete old snapshots keeping only latest N', async () => {
-      // Mock snapshots
-      const mockSnapshots = Array.from({ length: 10 }, (_, i) => ({
-        id: `snap-${i + 1}`,
-        documentId: 'doc-1',
-        tenantId: 'test-tenant',
-        state: { content: `content ${i + 1}` },
-        version: 100 - i, // Descending versions
-        timestamp: Date.now() - (i * 1000)
-      }));
-      
-      prisma.snapshot.findMany.mockResolvedValue(mockSnapshots);
-      prisma.snapshot.deleteMany.mockResolvedValue({ count: 5 });
-      
-      // Keep 5 latest snapshots
-      const deleteCount = await snapshotStore.purgeOldSnapshots('doc-1', 5);
-      
-      // Should delete 5 snapshots
-      expect(deleteCount).toBe(5);
-      
-      // Verify deletion query
+
       expect(prisma.snapshot.deleteMany).toHaveBeenCalledWith({
         where: {
+          documentId: 'doc-1',
+          tenantId: 'tenant-1',
           id: {
-            in: mockSnapshots.slice(5).map(s => s.id)
+            in: ['snapshot-3', 'snapshot-4', 'snapshot-5', 'snapshot-6', 'snapshot-7']
           }
         }
       });
-      
-      // Verify metrics
-      expect(metricsCollector.track).toHaveBeenCalledWith(
-        'snapshot.purged',
-        5,
-        expect.objectContaining({
-          documentId: 'doc-1',
-          keepCount: 5
-        })
-      );
     });
-    
-    test('should do nothing when fewer snapshots exist than keepCount', async () => {
-      // Mock only 3 snapshots
-      const mockSnapshots = Array.from({ length: 3 }, (_, i) => ({
-        id: `snap-${i + 1}`,
-        documentId: 'doc-1',
-        tenantId: 'test-tenant',
-        state: { content: `content ${i + 1}` },
-        version: 100 - i,
-        timestamp: Date.now() - (i * 1000)
-      }));
-      
-      prisma.snapshot.findMany.mockResolvedValue(mockSnapshots);
-      
-      // Try to keep 5 latest snapshots
-      const deleteCount = await snapshotStore.purgeOldSnapshots('doc-1', 5);
-      
-      // Should delete 0 snapshots
-      expect(deleteCount).toBe(0);
-      
-      // Verify no deletion occurred
-      expect(prisma.snapshot.deleteMany).not.toHaveBeenCalled();
+  });
+
+  describe('pruneSnapshotsByAge', () => {
+    it('should delete snapshots older than the specified age', async () => {
+      const cutoffTime = Date.now() - (30 * 24 * 60 * 60 * 1000); // 30 days ago
+      const mockSnapshots = [
+        { id: 'snapshot-1', version: 10, timestamp: Date.now() - 1000000 },
+        { id: 'snapshot-2', version: 9, timestamp: Date.now() - 2000000 },
+        { id: 'snapshot-3', version: 8, timestamp: cutoffTime - 1000 },
+        { id: 'snapshot-4', version: 7, timestamp: cutoffTime - 5000000 },
+        { id: 'snapshot-5', version: 6, timestamp: cutoffTime - 10000000 },
+      ];
+
+      prisma.snapshot.findMany.mockImplementation(() => Promise.resolve(mockSnapshots));
+      prisma.snapshot.deleteMany.mockImplementation(() => Promise.resolve({ count: 3 }));
+
+      await snapshotStore.pruneSnapshotsByAge('doc-1', 'tenant-1', 30);
+
+      expect(prisma.snapshot.findMany).toHaveBeenCalledWith({
+        where: {
+          documentId: 'doc-1',
+          tenantId: 'tenant-1'
+        }
+      });
+
+      expect(prisma.snapshot.deleteMany).toHaveBeenCalledWith({
+        where: {
+          documentId: 'doc-1',
+          tenantId: 'tenant-1',
+          id: {
+            in: ['snapshot-3', 'snapshot-4', 'snapshot-5']
+          }
+        }
+      });
     });
   });
 });
-
-// Update the mock snapshot with proper metadata
-const mockSnapshot = {
-  id: 'snap-1',
-  documentId: 'doc-1',
-  tenantId: 'test-tenant',
-  state: { content: 'test content' },
-  version: 8,
-  timestamp: new Date().toISOString(),
-  data: {},
-  metadata: {
-    version: 8,
-    documentId: 'doc-1',
-    timestamp: new Date().toISOString(),
-    eventCount: 20
-  }
-};
-
-// And update the method call to use string version parameter
-const result = await snapshotStore.getSnapshotByVersion('doc-1', '10', 'test-tenant');

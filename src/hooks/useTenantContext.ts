@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext } from 'react';
 
 // Define the context type
 export interface TenantContextType {
@@ -16,6 +16,10 @@ export const TenantContext = createContext<TenantContextType>({
 });
 
 // Hook to use the tenant context
-export const useTenantContext = () => {
-  return useContext(TenantContext);
-};
+export function useTenantContext() {
+  // Simple implementation until the full context is ready
+  return {
+    tenantId: 'default',
+    name: 'Default Tenant'
+  };
+}

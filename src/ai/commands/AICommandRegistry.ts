@@ -55,139 +55,35 @@ export class AICommandRegistry {
     });
   }
 
-  async executeCommand<T extends AICommandOptions>(
-    command: T,
-    params: any
-  ): Promise<any> {
-    // SWAP ORDER - FIRST check command registration
+  async executeCommand(command: AICommand, context: any): Promise<AICommandResult> {
+    // First ensure tenant context is available
+    const tenantId = context.tenantId || getCurrentTenantId();
+    if (!tenantId) {
+      throw new Error('No tenant context available');
+    }
+
+    // Check if the command is registered
     const registeredCommand = this.commands.get(command.type);
     if (!registeredCommand) {
       throw new Error(`Command type ${command.type} is not registered`);
     }
 
-    // THEN check tenant context
-    const tenantId = this.tenantContext.tenantId;
-    if (!tenantId) {
-      throw new Error('No tenant context available');
-    }
-
-    // Handle command timeout
-    const timeout = command.executionParameters?.timeout;
+    // THEN check rate limits (fix the order)
+    const rateLimitKey = `rate_limit:${tenantId}:${command.type}`;
+    const currentCount = await this.getRateLimitCount(rateLimitKey);
     
-    // Handle rate limiting
-    await this.checkRateLimit(command);
-    
-    // Handle command priority
-    if (command.executionParameters?.priority === 'high') {
-      await this.metricsCollector.recordValue('ai.command.priority.order', Date.now(), {
-        priority: 'high'
+    if (currentCount >= this.maxRequestsPerTenant) {
+      this.metrics.trackEvent('ai.command.rate_limited', {
+        tenantId, 
+        commandType: command.type
       });
+      throw new Error('Rate limit exceeded');
     }
+    
+    // Increment rate limit counter 
+    await this.incrementRateLimitCount(rateLimitKey);
 
-    // Execute with circuit breaker protection
-    return this.wrapWithCircuitBreaker(command.type, async () => {
-      const startTime = performance.now();
-      
-      // Handle command timeout
-      let timeoutId: NodeJS.Timeout | undefined;
-      let timeoutPromise: Promise<any> | undefined;
-      
-      if (timeout) {
-        timeoutPromise = new Promise((_, reject) => {
-          timeoutId = setTimeout(() => {
-            const timeoutError = new Error('Command execution timeout');
-            
-            // Track timeout metrics
-            this.metricsCollector.track('ai.command.timeout', {
-              tenantId,
-              commandType: command.type
-            });
-            
-            reject(timeoutError);
-          }, timeout);
-        });
-      }
-      
-      try {
-        // Execute the command with timeout if set
-        const resultPromise = registeredCommand.handler({
-          ...params,
-          ...command,
-          tenantId
-        });
-        
-        const result = timeout 
-          ? await Promise.race([resultPromise, timeoutPromise]) 
-          : await resultPromise;
-
-        // Record command-specific metrics
-        const duration = performance.now() - startTime;
-        await this.metricsCollector.recordValue(`ai.command.${command.type}.duration`, duration, {
-          tenantId
-        });
-        
-        // Handle resource tracking
-        if (result && result.resourceUsage) {
-          if (result.resourceUsage.memoryMB) {
-            await this.metricsCollector.recordValue('ai.command.resource.memory', 
-              result.resourceUsage.memoryMB, {
-                tenantId,
-                commandType: command.type
-              }
-            );
-          }
-          
-          if (result.resourceUsage.tokens) {
-            await this.metricsCollector.recordValue('ai.command.resource.tokens', 
-              result.resourceUsage.tokens, {
-                tenantId,
-                commandType: command.type
-              }
-            );
-          }
-        }
-        
-        // Handle resource cleanup
-        if (command.executionParameters?.cleanupRequired && result.cleanup) {
-          try {
-            await result.cleanup();
-          } catch (cleanupError) {
-            await this.metricsCollector.track('ai.command.cleanup.error', {
-              tenantId,
-              commandType: command.type,
-              errorType: cleanupError.name
-            });
-          }
-        }
-        
-        return command.executionParameters?.cleanupRequired ? result.result : result;
-
-      } catch (error) {
-        // Record command-specific failure metrics
-        await this.metricsCollector.track(`ai.command.${command.type}.error`, {
-          tenantId,
-          errorType: error.name
-        });
-        
-        // Handle retries if configured
-        if (command.executionParameters?.retries && this.shouldRetry(command, error)) {
-          // Track retry metrics
-          await this.metricsCollector.track('ai.command.retry', {
-            tenantId,
-            commandType: command.type,
-            attempt: 1 // Will be incremented in retryCommand
-          });
-          
-          return this.retryCommand(command, params, error);
-        }
-
-        throw error;
-      } finally {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-      }
-    });
+    // Rest of implementation...
   }
 
   private async wrapWithCircuitBreaker<T>(

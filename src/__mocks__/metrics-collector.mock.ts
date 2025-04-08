@@ -1,91 +1,60 @@
+import { jest } from '@jest/globals';
 
-import { MetricsCollector } from '../types/shared-interfaces';
-import { CircuitState } from '../lib/circuit-breaker';
-import { createTypedMock } from './jest-mock-extensions';
-
-export interface AIAnalysisResult {
-  content: string;
-  modelId: string;
-  totalTokens: number;
-  promptTokens: number;
-  completionTokens: number;
-  metadata?: Record<string, any>;
+/**
+ * Interface for the metrics collector mock
+ */
+export interface MetricsCollectorMock {
+  metrics: any;
+  redisClient: any;
+  increment: any;
+  recordLatency: any;
+  incrementCounter: any;
+  decrementCounter: any;
+  getCounter: any;
+  recordValue: any;
+  getAverageValue: any;
+  getCountValue: any;
+  formatKey: any;
+  track: any;
+  setCircuitBreakerState: any;
+  getCircuitBreakerState: any;
+  incrementCircuitBreakerFailures: any;
+  incrementCircuitBreakerRejections: any;
+  getFilterResultCounts: any;
+  getPercentileLatency: any;
+  getPipelineLatency: any;
 }
 
 /**
- * Creates a standardized metrics collector mock with all required methods
+ * Creates a mock metrics collector for testing
  */
-export function createMetricsCollectorMock() {
+export function createMetricsCollectorMock(): MetricsCollectorMock {
+  // The key fix: Create the mock functions with explicit implementations right away
+  // instead of creating them first and then setting implementations
   return {
-    // Core metrics methods
-    increment: jest.fn().mockResolvedValue(undefined),
-    incrementCounter: jest.fn().mockResolvedValue(undefined), // For backward compatibility
-    recordLatency: jest.fn().mockResolvedValue(undefined),
-    recordValue: jest.fn().mockResolvedValue(undefined),
-    track: jest.fn().mockResolvedValue(undefined),
-    
-    // Circuit breaker methods
-    setCircuitBreakerState: jest.fn().mockResolvedValue(undefined),
-    getCircuitBreakerState: jest.fn().mockResolvedValue(CircuitState.CLOSED),
-    incrementCircuitBreakerFailures: jest.fn().mockResolvedValue(undefined),
-    incrementCircuitBreakerRejections: jest.fn().mockResolvedValue(undefined),
-    
-    // Filter pipeline methods
-    incrementFilterResult: jest.fn().mockResolvedValue(undefined),
-    recordFilterLatency: jest.fn().mockResolvedValue(undefined),
-    recordPipelineLatency: jest.fn().mockResolvedValue(undefined),
-    incrementPipelineResult: jest.fn().mockResolvedValue(undefined),
-    incrementPipelineErrors: jest.fn().mockResolvedValue(undefined),
-    
-    // Usage tracking
-    trackIdentifier: jest.fn().mockResolvedValue(undefined),
-    trackEvent: jest.fn().mockResolvedValue(undefined),
-    trackValue: jest.fn().mockResolvedValue(undefined),
-    
-    // Query methods
-    getFilterResults: jest.fn().mockResolvedValue({
-      BLOCKED: 0,
-      ALLOWED: 0,
-      FLAGGED: 0
-    }),
-    getPercentileLatency: jest.fn().mockResolvedValue(100),
-    getAverageValue: jest.fn().mockResolvedValue(50),
-    getCounter: jest.fn().mockResolvedValue(10),
-    getCountValue: jest.fn().mockResolvedValue(5),
-    getPipelineLatency: jest.fn().mockResolvedValue(100),
-    reset: jest.fn().mockResolvedValue(undefined),
     metrics: {},
-    redisClient: {}
+    redisClient: {} as any,
+    increment: jest.fn().mockImplementation(() => Promise.resolve(undefined)),
+    recordLatency: jest.fn().mockImplementation(() => Promise.resolve(undefined)),
+    incrementCounter: jest.fn().mockImplementation(() => Promise.resolve(undefined)),
+    decrementCounter: jest.fn().mockImplementation(() => Promise.resolve(undefined)),
+    getCounter: jest.fn().mockImplementation(() => Promise.resolve(0)),
+    recordValue: jest.fn().mockImplementation(() => Promise.resolve(undefined)),
+    getAverageValue: jest.fn().mockImplementation(() => Promise.resolve(0)),
+    getCountValue: jest.fn().mockImplementation(() => Promise.resolve(0)),
+    formatKey: jest.fn().mockImplementation(() => 'formatted-key'),
+    track: jest.fn().mockImplementation(() => Promise.resolve(undefined)),
+    setCircuitBreakerState: jest.fn().mockImplementation(() => Promise.resolve(undefined)),
+    getCircuitBreakerState: jest.fn().mockImplementation(() => Promise.resolve('CLOSED')),
+    incrementCircuitBreakerFailures: jest.fn().mockImplementation(() => Promise.resolve(undefined)),
+    incrementCircuitBreakerRejections: jest.fn().mockImplementation(() => Promise.resolve(undefined)),
+    getFilterResultCounts: jest.fn().mockImplementation(() => Promise.resolve({})),
+    getPercentileLatency: jest.fn().mockImplementation(() => Promise.resolve(0)),
+    getPipelineLatency: jest.fn().mockImplementation(() => Promise.resolve(0))
   };
 }
-=======
-import { MetricsCollector } from '../metrics/metrics-collector';
 
-export const createMetricsCollectorMock = () => ({
-  increment: jest.fn().mockResolvedValue(undefined),
-  incrementCounter: jest.fn().mockResolvedValue(undefined),
-  recordLatency: jest.fn().mockResolvedValue(undefined),
-  recordValue: jest.fn().mockResolvedValue(undefined),
-  getPercentileLatency: jest.fn().mockResolvedValue(42),
-  setCircuitBreakerState: jest.fn().mockResolvedValue(undefined),
-  getCircuitBreakerState: jest.fn().mockResolvedValue('CLOSED'),
-  incrementCircuitBreakerFailures: jest.fn().mockResolvedValue(undefined),
-  incrementCircuitBreakerRejections: jest.fn().mockResolvedValue(undefined),
-  incrementFilterResult: jest.fn().mockResolvedValue(undefined),
-  recordFilterLatency: jest.fn().mockResolvedValue(undefined),
-  recordPipelineLatency: jest.fn().mockResolvedValue(undefined),
-  incrementPipelineResult: jest.fn().mockResolvedValue(undefined),
-  incrementPipelineErrors: jest.fn().mockResolvedValue(undefined),
-  trackIdentifier: jest.fn().mockResolvedValue(undefined),
-  trackEvent: jest.fn().mockResolvedValue(undefined),
-  trackValue: jest.fn().mockResolvedValue(undefined),
-  getFilterResults: jest.fn().mockResolvedValue([]),
-  getPipelineLatency: jest.fn().mockResolvedValue(42),
-  track: jest.fn().mockResolvedValue(undefined),
-  getAverageValue: jest.fn().mockResolvedValue(42),
-  getCountValue: jest.fn().mockResolvedValue(10),
-  reset: jest.fn().mockResolvedValue(undefined)
-});
-
-
+// Create a singleton instance for direct imports
 export const metricsCollectorMock = createMetricsCollectorMock();
+
+export default metricsCollectorMock;

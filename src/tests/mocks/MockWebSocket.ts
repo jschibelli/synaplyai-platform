@@ -1,85 +1,136 @@
+/**
+ * Mock implementation of WebSocket for testing
+ */
 export class MockWebSocket {
-  static CONNECTING = 0;
-  static OPEN = 1;
-  static CLOSING = 2;
-  static CLOSED = 3;
+  // Add standard WebSocket constants
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSING = 2;
+  static readonly CLOSED = 3;
   
-  url: string;
+  // Instance properties that mirror WebSocket
+  readonly CONNECTING = 0;
+  readonly OPEN = 1;
+  readonly CLOSING = 2;
+  readonly CLOSED = 3;
+  
   readyState: number = 0;
-  binaryType: string = 'blob';
-  extensions: string = '';
+  url: string = '';
   protocol: string = '';
+  extensions: string = '';
+  binaryType: string = 'blob';
   bufferedAmount: number = 0;
   
   // Event handlers
-  onopen: ((this: WebSocket, ev: Event) => any) | null = null;
-  onclose: ((this: WebSocket, ev: CloseEvent) => any) | null = null;
-  onmessage: ((this: WebSocket, ev: MessageEvent) => any) | null = null;
-  onerror: ((this: WebSocket, ev: Event) => any) | null = null;
+  onopen: ((event: Event) => void) | null = null;
+  onclose: ((event: CloseEvent) => void) | null = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
   
-  // Messages for testing
-  static sentMessages: any[] = [];
+  // Test-specific properties
+  private listeners: Record<string, Function[]> = {};
   messages: any[] = [];
-
-  constructor(url: string = 'ws://localhost:8080') {
-    this.url = url;
+  
+  constructor(url?: string) {
+    this.url = url || 'ws://localhost:8080';
+    this.readyState = this.CONNECTING;
+    
+    // Simulate immediate connection
     setTimeout(() => {
-      this.readyState = MockWebSocket.OPEN;
+      this.readyState = this.OPEN;
       if (this.onopen) {
         const event = new Event('open');
-        this.onopen(event as any);
+        this.onopen(event);
       }
     }, 0);
   }
-
-  send(data: string): void {
-    const parsed = JSON.parse(data);
-    MockWebSocket.sentMessages.push(parsed);
-    this.messages.push(parsed);
+  
+  close(code?: number, reason?: string): void {
+    this.readyState = this.CLOSING;
+    
+    setTimeout(() => {
+      this.readyState = this.CLOSED;
+      if (this.onclose) {
+        const event = new CloseEvent('close', {
+          code: code || 1000,
+          reason: reason || '',
+          wasClean: true
+        });
+        this.onclose(event);
+      }
+    }, 0);
   }
   
-  close(): void {
-    this.readyState = MockWebSocket.CLOSED;
-    if (this.onclose) {
-      const event = new CloseEvent('close');
-      this.onclose(event as any);
-    }
+  send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
+    this.messages.push(data);
   }
-
-  // Event handling
-  on(event: string, callback: Function): void {
+  
+  // Event listener methods
+  addEventListener(event: string, callback: Function): void {
     if (!this.listeners[event]) {
       this.listeners[event] = [];
     }
     this.listeners[event].push(callback);
   }
-
-  off(event: string): void {
+  
+  removeEventListener(event: string): void {
     this.listeners[event] = [];
   }
-
-  emit(event: string, data: any): void {
-    if (this.listeners[event]) {
-      this.listeners[event].forEach(callback => callback(data));
+  
+  dispatchEvent(event: Event): boolean {
+    if (this.listeners[event.type]) {
+      this.listeners[event.type].forEach(callback => callback(event));
     }
-  }
-
-  // Helper methods for tests
-  static triggerMessage(data: any): void {
-    // Static helper for tests
+    return true;
   }
   
-  triggerMessage(data: any): void {
+  // Methods for testing
+  triggerMessage(message: string): void {
+    const event = {
+      data: message,
+      type: 'message',
+      target: this
+    };
+    
     if (this.onmessage) {
-      this.onmessage({ data } as any);
+      this.onmessage(event as any);
+    }
+    
+    if (this.listeners['message']) {
+      this.listeners['message'].forEach(cb => cb(event));
     }
   }
   
-  static reset(): void {
-    MockWebSocket.sentMessages = [];
+  reset(): void {
+    this.messages = [];
+    this.listeners = {};
+    this.onopen = null;
+    this.onclose = null;
+    this.onmessage = null;
+    this.onerror = null;
   }
   
-  static simulateReconnection(): void {
-    // Implementation for reconnection simulation
+  simulateReconnection(): void {
+    this.close();
+    setTimeout(() => {
+      this.readyState = this.CONNECTING;
+      setTimeout(() => {
+        this.readyState = this.OPEN;
+        if (this.onopen) {
+          const event = new Event('open');
+          this.onopen(event);
+        }
+      }, 10);
+    }, 10);
   }
+}
+
+// Create a static factory function that can be used in tests
+export function createMockWebSocket(): MockWebSocket {
+  return new MockWebSocket();
+}
+
+// React component wrapper for WebSocket provider in tests
+export function MockWebSocketProvider({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
 }

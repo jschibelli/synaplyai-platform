@@ -2,7 +2,7 @@ import { MetricsCollector } from '../services/metrics/MetricsCollector';
 import { getTenantContext } from './tenant-context';
 
 import { EventEmitter } from 'events';
-=======
+
 import { MetricsCollector } from './metrics/metrics-interface';
 
 

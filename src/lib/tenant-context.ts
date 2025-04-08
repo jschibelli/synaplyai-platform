@@ -17,9 +17,8 @@ export interface TenantContext {
   [key: string]: any;
 }
 
-
-// Create AsyncLocalStorage for tenant context
-export const tenantContextStorage = new AsyncLocalStorage<TenantContext>();
+// Use a different name for the storage instance to avoid duplicate declaration
+const asyncTenantContextStorage = new AsyncLocalStorage<TenantContext>();
 
 // Default values for testing
 let currentContext: TenantContext = {
@@ -31,14 +30,14 @@ let currentContext: TenantContext = {
  * Set the current tenant context for the async scope
  */
 export function setCurrentTenantContext(context: TenantContext): void {
-  tenantContextStorage.enterWith(context);
+  asyncTenantContextStorage.enterWith(context);
 }
 
 /**
  * Get the current tenant context from async scope
  */
 export function getCurrentTenantContext(): TenantContext | undefined {
-  return tenantContextStorage.getStore();
+  return asyncTenantContextStorage.getStore();
 }
 
 /**
@@ -72,7 +71,7 @@ export function tenantContextMiddleware() {
       traceId
     };
     
-    tenantContextStorage.run(context, () => {
+    asyncTenantContextStorage.run(context, () => {
       next();
     });
   };
@@ -90,7 +89,7 @@ function generateRequestId(): string {
  */
 export async function runWithTenantContext<T>(context: TenantContext, fn: () => Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    tenantContextStorage.run(context, async () => {
+    asyncTenantContextStorage.run(context, async () => {
       try {
         const result = await fn();
         resolve(result);
@@ -113,10 +112,6 @@ export function createTestTenantContext(overrides?: Partial<TenantContext>): Ten
   };
 }
 
-// Create a singleton instance of AsyncLocalStorage for tenant context
-const tenantContextStorage = new AsyncLocalStorage<TenantContext>();
-
-
 /**
  * Create a new tenant context
  */
@@ -137,21 +132,21 @@ export function createTenantContext(tenantId: string, userId: string, additional
  * Run a function within a tenant context
  */
 export function runWithTenantContextSync<T>(tenantContext: TenantContext, fn: () => T): T {
-  return tenantContextStorage.run(tenantContext, fn);
+  return asyncTenantContextStorage.run(tenantContext, fn);
 }
 
 /**
  * Run an async function within a tenant context
  */
 export async function runWithTenantContextAsync<T>(tenantContext: TenantContext, fn: () => Promise<T>): Promise<T> {
-  return tenantContextStorage.run(tenantContext, fn);
+  return asyncTenantContextStorage.run(tenantContext, fn);
 }
 
 /**
  * Get the complete tenant context
  */
-export function getTenantContext(): TenantContext | null {
-  return currentContext || null;
+export function getTenantContext(): TenantContext | undefined {
+  return asyncTenantContextStorage.getStore();
 }
 
 /**
@@ -230,7 +225,6 @@ if (process.env.NODE_ENV !== 'production') {
   setDefaultTenantContext();
 
 }
-}
 
 /**
  * Create a minimal default tenant context with required fields
@@ -247,11 +241,11 @@ export function createDefaultTenantContext(tenantId: string): TenantContext {
 // Export a clear function for testing
 export function clearTenantContext(): void {
   // AsyncLocalStorage doesn't have a direct way to clear context
-  tenantContextStorage.enterWith(undefined as any);
+  asyncTenantContextStorage.enterWith(undefined as any);
 }
 
 // Add aliases for compatibility with existing tests
 export const getCurrentTenantContext = getTenantContext;
 export const setCurrentTenantContext = setTenantContext;
-export { tenantContextStorage };
+export { asyncTenantContextStorage };
 
