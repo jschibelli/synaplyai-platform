@@ -87,6 +87,11 @@ web_modules/
 .next
 out
 
+# Internal directories
+docs/internal-docs
+docs/tech-writer
+
+
 # Nuxt.js build / generate output
 .nuxt
 dist
