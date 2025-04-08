@@ -212,6 +212,7 @@ export class CommandAggregator {
       const duration = performance.now() - startTime;
       await this.metricsCollector.recordLatency(`command.group.${intent}.process`, duration);
       await this.metricsCollector.increment(`command.group.${intent}.count`, commands.length);
+      await this.metricsCollector.increment('command.aggregated', { count: '1' });
     } catch (error) {
       // If an error occurs, reject all commands
       for (const entry of commands) {

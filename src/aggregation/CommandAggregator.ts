@@ -251,7 +251,7 @@ export class CommandAggregator {
           );
           
           // Simple count increment instead of complex tracking
-          await this.metricsCollector.increment('command.aggregated', '1');
+          await this.metricsCollector.increment('command.aggregated', { count: '1' });
         } else {
           // Execute the original command (no aggregation was possible)
           const entry = aggregation.originalCommands[0];

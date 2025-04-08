@@ -75,9 +75,8 @@
 
 /* Token styling */
 .token {
-  transition: background-color 0.2s ease;
-  border-radius: 3px;
-  margin: 0 1px;
+  border-radius: 2px;
+  padding: 0 1px;
 }
 
 .token:hover {
@@ -85,9 +84,7 @@
 }
 
 /* Token state styling */
-.token-state-default {
-  /* No special styling */
-}
+.token-state-default {}
 
 .token-state-accepted {
   background-color: rgba(46, 204, 113, 0.2);
@@ -96,7 +93,6 @@
 .token-state-rejected {
   background-color: rgba(231, 76, 60, 0.2);
   text-decoration: line-through;
-  color: #777;
 }
 
 .token-state-conflict {
@@ -116,11 +112,11 @@
 
 /* User cursor styling */
 .user-cursor {
-  display: inline-block;
+  position: absolute;
   width: 2px;
-  position: relative;
+  height: 20px;
+  background-color: #3498db;
   animation: blink 1s infinite;
-  z-index: 10;
 }
 
 .user-cursor::after {
