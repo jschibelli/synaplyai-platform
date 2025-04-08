@@ -23,7 +23,8 @@
     "skipLibCheck": true,
     "outDir": "./dist",
     "resolveJsonModule": true,
-    "rootDir": "./src",
+    "rootDir": ".",
+    "rootDirs": ["src", "__mocks__"],
     "allowJs": true,
     "noEmit": true,
     "incremental": true,
@@ -31,7 +32,9 @@
     "jsx": "preserve"
   },
   "include": [
-    "src/**/*"
+    "src/**/*",
+    "__mocks__/**/*",
+    "jest.setup-mocks.ts"
   ],
   "exclude": [
     "node_modules",

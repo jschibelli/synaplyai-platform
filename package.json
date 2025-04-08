@@ -17,7 +17,9 @@
     "async_hooks": "^1.0.0",
     "autoprefixer": "^10.4.15",
     "chart.js": "^4.4.8",
+    "esbuild-register": "^3.4.2",
     "ioredis": "^5.6.0",
+    "lib0": "^0.2.52",
     "next": "^15.2.4",
     "next-auth": "^4.22.1",
     "nodemailer": "^6.10.0",
@@ -31,14 +33,18 @@
     "redis-mock": "^0.56.3",
     "socket.io": "^4.7.2",
     "tailwindcss": "^3.3.3",
-    "uuid": "^9.0.0",
-    "ws": "^8.13.0",
-    "yjs": "^13.6.8"
+    "uuid": "^9.0.1",
+    "ws": "^8.18.1",
+    "y-indexeddb": "^9.0.9",
+    "y-protocols": "^1.0.5",
+    "y-websocket": "^1.5.0",
+    "yjs": "^13.6.7"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "node server.js",
+    "dev:next": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node server.js",
     "lint": "next lint",
     "test": "jest",
     "test:tenant-isolation": "jest --testPathPattern=tests/tenant-isolation",
@@ -54,7 +60,9 @@
     "clean-ports": "node scripts/close-ports.js",
     "dev:clean": "npm run clean-ports && npm run dev",
     "super-clean": "taskkill /F /IM node.exe || true && rmdir /S /Q node_modules && rmdir /S /Q .next && npm cache clean --force && npm install && npm run dev",
-    "test:load": "npx ts-node --project tsconfig.json tests/performance/LoadTest.bench.ts"
+    "test:load": "npx ts-node --project tsconfig.json tests/performance/LoadTest.bench.ts",
+    "test:dev": "jest --config=jest.config.dev.js --passWithNoTests",
+    "yjs-server": "ts-node --project tsconfig.server.json src/server/startYjsServer.ts"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",
@@ -67,7 +75,7 @@
     "@types/react-dom": "^18.2.7",
     "@types/redis-mock": "^0.17.1",
     "@types/uuid": "^9.0.0",
-    "@types/ws": "^8.5.5",
+    "@types/ws": "^8.5.10",
     "cross-env": "^7.0.3",
     "eslint": "^8.47.0",
     "eslint-config-next": "^13.4.19",

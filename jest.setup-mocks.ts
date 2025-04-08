@@ -1,9 +1,28 @@
 import 'jest-environment-jsdom';
 import { CircuitState } from './src/lib/circuit-breaker';
-import { createCircuitBreakerMock, circuitBreakerMock, MockCircuitBreaker } from './__mocks__/circuit-breaker.mock';
-import { createMetricsCollectorMock, metricsCollectorMock, MetricsCollectorMock } from './__mocks__/metrics-collector.mock';
-import { getTenantContextMock, setTenantContextMock, clearTenantContextMock } from './__mocks__/tenant-context.mock';
-import prisma from './__mocks__/prisma.mock';
+
+// Fix the import paths to reference the mocks correctly
+// Make sure to use "import type" for type-only imports
+import { 
+  createCircuitBreakerMock, 
+  circuitBreakerMock
+} from './src/__mocks__/circuit-breaker.mock';
+// Use "import type" for interface imports
+import type { MockCircuitBreaker } from './src/__mocks__/circuit-breaker.mock';
+
+import { 
+  createMetricsCollectorMock, 
+  metricsCollectorMock
+} from './src/__mocks__/metrics-collector.mock';
+// Use "import type" for interface imports
+import type { MetricsCollectorMock } from './src/__mocks__/metrics-collector.mock';
+
+import { 
+  getTenantContextMock, 
+  setTenantContextMock, 
+  clearTenantContextMock 
+} from './src/__mocks__/tenant-context.mock';
+import prisma from './src/__mocks__/prisma.mock';
 
 // Helper functions
 function createMockMetricsCollector(props?: any): MetricsCollectorMock {
@@ -101,30 +120,43 @@ global.createTestConflict = createTestConflict;
 global.createMockDocument = createMockDocument;
 global.MockWebSocket = MockWebSocket;
 
-// Export for direct imports
+// Re-export all the mocks so they can be used in tests
+// Use "export type" for type-only exports
 export {
+  createCircuitBreakerMock,
+  circuitBreakerMock,
+  // Fix: Use "export type" for interface exports
+  type MockCircuitBreaker,
+  createMetricsCollectorMock,
+  metricsCollectorMock,
+  // Fix: Use "export type" for interface exports
+  type MetricsCollectorMock,
+  getTenantContextMock,
+  setTenantContextMock,
+  clearTenantContextMock,
+  prisma,
   createTestConflict,
   createMockDocument,
-  MockWebSocket,
-  createMockMetricsCollector  // This was missing but is now added
+  MockWebSocket
 };
 
 // Set up global mocks
 jest.mock('./src/lib/circuit-breaker', () => ({
-  CircuitBreaker: createCircuitBreakerMock,
-  CircuitState: {
-    OPEN: 'OPEN',
-    CLOSED: 'CLOSED',
-    HALF_OPEN: 'HALF_OPEN'
-  }
+  ...jest.requireActual('./src/lib/circuit-breaker'),
+  createCircuitBreaker: createCircuitBreakerMock,
+  circuitBreaker: circuitBreakerMock
 }));
 
 jest.mock('./src/metrics/metrics-collector', () => ({
-  MetricsCollector: createMetricsCollectorMock,
-  default: metricsCollectorMock
+  metricsCollector: metricsCollectorMock
 }));
 
-// Mock PrismaClient
+jest.mock('./src/lib/tenant-context', () => ({
+  getTenantContext: getTenantContextMock,
+  setTenantContext: setTenantContextMock,
+  clearTenantContext: clearTenantContextMock
+}));
+
 jest.mock('@prisma/client', () => ({
   PrismaClient: jest.fn(() => prisma)
 }));
