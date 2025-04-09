@@ -124,5 +124,7 @@ For subsystem documentation, see `/docs`.
 
 ## License
 
-MIT — see [LICENSE](./LICENSE) for details
+This repository contains proprietary source code and is not licensed for public distribution or use.  
+© John Schibelli. All rights reserved.
+
 
