@@ -2,7 +2,7 @@
 
 Built and architected by [John Schibelli](https://github.com/jschibelli) — Front-End Lead, UI/UX architect, and platform co-creator.
 
-## TL;DR
+## At a Glance
 
 SynaplyAI is a secure, scalable AI content creation platform built for enterprise teams who need governance, real-time collaboration, and performance at scale. It features token-level AI interaction (OpenAI + Claude), full tenant isolation, and collaborative editing with real-time feedback loops.
 
