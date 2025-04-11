@@ -88,8 +88,8 @@ web_modules/
 out
 
 # Internal directories
-docs/internal-docs
-docs/tech-writer
+docs/internal-docs/
+docs/tech-writer/
 
 
 # Nuxt.js build / generate output
